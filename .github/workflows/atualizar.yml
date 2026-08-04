@@ -1,0 +1,31 @@
+name: Atualizar painel de residuos
+
+on:
+  schedule:
+    - cron: "0 10 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Extrair CTRs do SP Regula
+        env:
+          SENHA_SPREGULA: ${{ secrets.SENHA_SPREGULA }}
+        run: python extrair_ctrs.py --dias 30
+      - name: Publicar dados atualizados
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add dados_ctr.js base_consolidada.json base_consolidada.xlsx 2>/dev/null || true
+          git commit -m "Atualiza dados CTR" || echo "sem mudancas"
+          git push
