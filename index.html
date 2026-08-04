@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Gestão de Resíduos — CTR's SP Regula</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="dados_ctr.js" onerror="/* ainda sem dados extraídos */"></script>
+<style>
+  :root{
+    --orange:#F07E22; --orange-d:#D96A15; --ink:#242A30; --slate:#6A7B8C;
+    --line:#E6EAEE; --bg:#F5F6F8; --card:#FFFFFF; --cream:#FFF4EA; --cream-bd:#F6CFA6;
+    --blue:#3E7CB1; --green:#2E9E5B; --amber:#E0A423; --red:#C0463B; --violet:#7B61B5; --navy2:#2C4E7A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);padding:0 0 40px}
+  .appbar{background:#fff;border-bottom:3px solid var(--orange);padding:14px 26px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  .brand{display:flex;align-items:center;gap:16px}
+  .logo{height:34px;width:auto;display:block}
+  .brand h1{font-size:17px;color:var(--ink);font-weight:700}
+  .brand .sub{font-size:12px;color:var(--slate);margin-top:2px}
+  .brand .sub b{color:var(--orange)}
+  .updated{font-size:12px;color:var(--slate);text-align:right}
+  .updated b{color:var(--ink)}
+  .wrap{padding:20px 26px 0}
+  .filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .filters label{font-size:11px;color:var(--slate);display:block;margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  .filters select{padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px;min-width:170px;color:var(--ink)}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(20,40,60,.04);border-top:3px solid var(--slate)}
+  .kpi .n{font-size:26px;font-weight:800;line-height:1;color:var(--ink)}
+  .kpi .l{font-size:11.5px;color:var(--slate);margin-top:6px;font-weight:600}
+  .kpi.k0{border-top-color:var(--amber)} .kpi.k1{border-top-color:var(--navy2)}
+  .kpi.k2{border-top-color:var(--orange)} .kpi.k3{border-top-color:var(--violet)}
+  .kpi.k4{border-top-color:var(--green)} .kpi.k5{border-top-color:var(--red)}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:16px}
+  .grid.three{grid-template-columns:1.3fr 1fr 1fr}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,40,60,.04)}
+  .panel h3{font-size:13px;color:var(--ink);margin-bottom:12px;font-weight:700}
+  .panel h3::before{content:"";display:inline-block;width:7px;height:7px;background:var(--orange);border-radius:2px;margin-right:8px;vertical-align:middle}
+  .panel .cwrap{position:relative;height:240px}
+  .summary{display:flex;gap:20px;flex-wrap:wrap;background:var(--cream);border:1px solid var(--cream-bd);border-radius:12px;padding:15px 20px;margin-bottom:18px}
+  .summary .item .v{font-size:22px;font-weight:800;color:var(--orange)}
+  .summary .item .k{font-size:11.5px;color:var(--slate);margin-top:2px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{background:#FAFBFC;text-align:left;padding:9px 10px;color:var(--slate);font-weight:700;font-size:11px;letter-spacing:.3px;text-transform:uppercase;border-bottom:2px solid var(--line);position:sticky;top:0}
+  td{padding:8px 10px;border-bottom:1px solid var(--line)}
+  tr:hover td{background:#FFF9F3}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .cl-A{background:#E3EEF9;color:#1F5C99}.cl-B{background:#E6F4EA;color:#217a45}
+  .cl-C{background:#FBF0DE;color:#9a6a10}.cl-D{background:#FBE4E1;color:#9c352b}
+  .tbl-wrap{max-height:360px;overflow:auto}
+  .inp{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:#fff;color:var(--ink)}
+  .btn{padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+  .foot{margin-top:20px;font-size:11.5px;color:var(--slate);border-top:1px solid var(--line);padding-top:12px;line-height:1.5}
+  .foot b{color:var(--ink)}
+  @media(max-width:1050px){.kpis{grid-template-columns:repeat(3,1fr)}.grid,.grid.three{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="appbar">
+    <div class="brand">
+      <img class="logo" src="conx_logo.png" alt="CONX">
+      <div>
+        <h1>Painel de Gestão de Resíduos</h1>
+        <div class="sub">Indicadores de CTR · Coletas Online / SP Regula · <b>atualizado semanalmente</b></div>
+      </div>
+    </div>
+    <div class="updated">Última atualização<br><b id="lastUpd">—</b></div>
+  </div>
+  <div class="wrap">
+
+  <div class="filters">
+    <div><label>Obra</label><select id="fObra"></select></div>
+    <div><label>Etapa</label><select id="fEtapa"></select></div>
+    <div><label>Período</label><select id="fPeriodo">
+      <option value="28">Últimas 4 semanas</option>
+      <option value="56">Últimas 8 semanas</option>
+      <option value="90">Últimos 90 dias</option>
+      <option value="9999" selected>Tudo</option>
+    </select></div>
+    <div><label>Transportador</label><select id="fTransp"></select></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="summary" id="summary"></div>
+
+  <div class="grid three">
+    <div class="panel"><h3>Resíduos por etapa da obra (m³)</h3><div class="cwrap"><canvas id="cEtapa"></canvas></div></div>
+    <div class="panel"><h3>Por classe (CONAMA 307)</h3><div class="cwrap"><canvas id="cClasse"></canvas></div></div>
+    <div class="panel"><h3>Situação das CTRs</h3><div class="cwrap"><canvas id="cStatus"></canvas></div></div>
+  </div>
+  <div class="grid">
+    <div class="panel"><h3>Volume por obra (m³)</h3><div class="cwrap"><canvas id="cObra"></canvas></div></div>
+    <div class="panel"><h3>Evolução semanal (m³)</h3><div class="cwrap"><canvas id="cSemana"></canvas></div></div>
+  </div>
+  <div class="grid">
+    <div class="panel"><h3>Por transportador (m³)</h3><div class="cwrap"><canvas id="cTransp"></canvas></div></div>
+    <div class="panel"><h3>Por tipo de resíduo (m³)</h3><div class="cwrap"><canvas id="cResiduo"></canvas></div></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h3>CTRs recentes</h3>
+    <div class="tbl-wrap">
+      <table id="tbl"><thead><tr>
+        <th>Data</th><th>Obra</th><th>Etapa</th><th>Resíduo</th><th>Classe</th>
+        <th>Transportador</th><th>Qtd (m³)</th><th>Destino</th><th>Situação</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h3>Características das obras</h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-6px 0 12px">Defina a fase atual e os dados de cada obra (salvo neste navegador). Usados na comparação abaixo.</p>
+    <div class="tbl-wrap" style="max-height:440px">
+      <table id="tblCarac"><thead><tr>
+        <th>Obra</th><th>Fase atual</th><th>Área terreno (m²)</th><th>Estrutura</th><th>Pavimentos</th><th>Torres</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h3>Comparar obras</h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-6px 0 12px">Selecione as obras e compare os resíduos por fase, área, estrutura, pavimentos e torres.</p>
+    <div id="cmpChecks" style="display:flex;flex-wrap:wrap;gap:8px 18px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <label style="font-size:11px;color:var(--slate);font-weight:700;text-transform:uppercase;letter-spacing:.3px">Métrica do gráfico</label>
+      <select id="cmpMetrica" class="inp" style="min-width:210px;padding:9px 11px"></select>
+    </div>
+    <div class="cwrap" style="height:260px;margin-bottom:16px"><canvas id="cCompara"></canvas></div>
+    <div class="tbl-wrap" style="max-height:none"><table id="tblCmp"></table></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h3>Adicionar obra nova</h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-6px 0 14px">Cadastre novas obras aqui, clique em <b>Baixar novas_obras.csv</b> e envie o arquivo para o repositório do GitHub (mesma pasta do extrair_ctrs.py). Na próxima atualização elas entram no painel.</p>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr .9fr 1.3fr .7fr auto;gap:10px;align-items:end">
+      <div><label style="font-size:11px;color:var(--slate);font-weight:700;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px">Obra</label><input id="oNome" class="inp" placeholder="Nome da obra" style="width:100%;padding:9px 11px"></div>
+      <div><label style="font-size:11px;color:var(--slate);font-weight:700;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px">Login (CNPJ)</label><input id="oCnpj" class="inp" placeholder="só números" style="width:100%;padding:9px 11px"></div>
+      <div><label style="font-size:11px;color:var(--slate);font-weight:700;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px">Senha</label><input id="oSenha" class="inp" value="conx2016" style="width:100%;padding:9px 11px"></div>
+      <div><label style="font-size:11px;color:var(--slate);font-weight:700;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px">Etapa atual</label><select id="oEtapa" class="inp" style="width:100%;padding:9px 11px"></select></div>
+      <div><label style="font-size:11px;color:var(--slate);font-weight:700;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:4px">Ativo</label><select id="oAtivo" class="inp" style="width:100%;padding:9px 11px"><option>Sim</option><option>Não</option></select></div>
+      <button id="btAdd" class="btn" style="height:37px">Adicionar</button>
+    </div>
+    <div id="obrasWrap" style="margin-top:14px"></div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+  </div>
+
+<script>
+const PAL = ['#F07E22','#2C4E7A','#2E9E5B','#E0A423','#7B61B5','#3E7CB1','#C0463B','#8A8F98'];
+const STATUS_COR = {
+  'Pendente Envio':'#E0A423','Pendente Recebimento':'#2C4E7A','Em Obra':'#F07E22',
+  'Em Trânsito':'#7B61B5','Baixada':'#2E9E5B','Recusada no Destino Final':'#C0463B'};
+const STATUS_ORDEM = ['Pendente Envio','Pendente Recebimento','Em Obra','Em Trânsito','Baixada','Recusada no Destino Final'];
+const RES_CLASSE = {
+  'Concreto/Argamassa/Alvenaria/Cerâmicos':'A','Solo/Terra':'A','Blocos/Telhas':'A',
+  'Madeira':'B','Metal':'B','Papel/Papelão':'B','Plástico':'B','Gesso':'B',
+  'Resíduo misturado (sem separação)':'C','Lã de vidro/rocha':'C',
+  'Tintas/Solventes/Óleo':'D','Amianto':'D','Lâmpadas/Baterias':'D'};
+
+let RAW = (window.DADOS_CTR && window.DADOS_CTR.length) ? window.DADOS_CTR : [];
+const SEM_DADOS = RAW.length === 0;
+RAW.forEach(r=>{ if(!r.classe) r.classe = RES_CLASSE[r.residuo] || 'C'; r.quantidade = +r.quantidade||0; });
+if(SEM_DADOS){
+  const b=document.createElement('div');
+  b.style.cssText='background:var(--cream);border:1px solid var(--cream-bd);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13.5px;color:var(--ink)';
+  b.innerHTML='Ainda sem dados. A primeira atualização automática vai preencher o painel. (No GitHub, rode o workflow em Actions → Run workflow para gerar agora.)';
+  document.querySelector('.wrap').prepend(b);
+}
+
+const uniq = (a)=>[...new Set(a)].sort();
+const charts = {};
+function opt(sel, arr, all){
+  document.getElementById(sel).innerHTML = `<option value="__all">${all}</option>`+arr.map(v=>`<option>${v}</option>`).join('');
+}
+opt('fObra', uniq(RAW.map(r=>r.obra)), 'Todas as obras');
+opt('fEtapa', uniq(RAW.map(r=>r.etapa)), 'Todas as etapas');
+opt('fTransp', uniq(RAW.map(r=>r.transportador)), 'Todos');
+
+function filtrar(){
+  const o=fObra.value, e=fEtapa.value, t=fTransp.value, dias=+fPeriodo.value;
+  const hoje=new Date(); const limite=new Date(hoje); limite.setDate(limite.getDate()-dias);
+  return RAW.filter(r=>
+    (o==='__all'||r.obra===o) && (e==='__all'||r.etapa===e) &&
+    (t==='__all'||r.transportador===t) &&
+    (dias>=9999 || new Date(r.data)>=limite));
+}
+function soma(arr,key){const m={};arr.forEach(r=>m[r[key]]=(m[r[key]]||0)+r.quantidade);return m;}
+function cont(arr,key){const m={};arr.forEach(r=>m[r[key]]=(m[r[key]]||0)+1);return m;}
+function mkChart(id,type,labels,data,opts={}){
+  if(charts[id]) charts[id].destroy();
+  charts[id]=new Chart(document.getElementById(id),{type,data:{labels,datasets:[Object.assign({
+    data, backgroundColor:opts.colors||PAL, borderRadius:type==='bar'?5:0,
+    borderWidth:type==='line'?2:0, borderColor:opts.line||'#F07E22', fill:type==='line', tension:.3
+  },opts.ds||{})]},
+  options:Object.assign({responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:opts.legend||false,position:'right',labels:{boxWidth:12,font:{size:11}}}},
+    scales:opts.noScale?{}:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:10}}}}
+  },opts.o||{})});
+}
+
+function render(){
+  const d=filtrar();
+  document.getElementById('lastUpd').textContent = (window.DADOS_META && window.DADOS_META.gerado_em) || '—';
+  const c=cont(d,'status');
+  document.getElementById('kpis').innerHTML = STATUS_ORDEM.map((s,i)=>
+    `<div class="kpi k${i}"><div class="n">${c[s]||0}</div><div class="l">${s}</div></div>`).join('');
+  const totVol=d.reduce((a,r)=>a+r.quantidade,0);
+  const nObras=uniq(d.map(r=>r.obra)).length;
+  const baix=d.filter(r=>r.status==='Baixada').length;
+  const txDest = d.length? (baix/d.length*100):0;
+  const classeA = d.filter(r=>r.classe==='A').reduce((a,r)=>a+r.quantidade,0);
+  const diverg = d.filter(r=>r.divergencia).length;
+  document.getElementById('summary').innerHTML = [
+    ['Total de CTRs', d.length],
+    ['Volume total', totVol.toFixed(0)+' m³'],
+    ['Obras no filtro', nObras],
+    ['Taxa de destinação (baixadas)', txDest.toFixed(0)+'%'],
+    ['Recebidas com divergência', diverg],
+    ['Volume Classe A (reciclável)', classeA.toFixed(0)+' m³']
+  ].map(([k,v])=>`<div class="item"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+
+  const se=soma(d,'etapa');
+  mkChart('cEtapa','bar',Object.keys(se),Object.values(se),{colors:PAL,o:{indexAxis:'y'}});
+  const scl={A:0,B:0,C:0,D:0}; d.forEach(r=>scl[r.classe]=(scl[r.classe]||0)+r.quantidade);
+  mkChart('cClasse','doughnut',['A - reutilizável/reciclável','B - reciclável','C - sem tecnologia','D - perigoso'],
+    Object.values(scl),{colors:['#3E7CB1','#2E9E5B','#E0A423','#C0463B'],legend:true,noScale:true});
+  const scont=STATUS_ORDEM.map(s=>c[s]||0);
+  mkChart('cStatus','doughnut',STATUS_ORDEM,scont,{colors:STATUS_ORDEM.map(s=>STATUS_COR[s]),legend:true,noScale:true});
+  const so=soma(d,'obra');
+  mkChart('cObra','bar',Object.keys(so),Object.values(so),{colors:PAL});
+  const wk={};
+  d.forEach(r=>{const dt=new Date(r.data);const oneJan=new Date(dt.getFullYear(),0,1);
+    const w=Math.ceil((((dt-oneJan)/86400000)+oneJan.getDay()+1)/7);
+    const key=dt.getFullYear()+'-S'+String(w).padStart(2,'0');wk[key]=(wk[key]||0)+r.quantidade;});
+  const wkeys=Object.keys(wk).sort();
+  mkChart('cSemana','line',wkeys,wkeys.map(k=>+wk[k].toFixed(1)),{line:'#F07E22'});
+  const st=soma(d,'transportador');
+  mkChart('cTransp','bar',Object.keys(st),Object.values(st),{colors:PAL,o:{indexAxis:'y'}});
+  const sr=soma(d,'residuo');
+  const rk=Object.keys(sr).sort((a,b)=>sr[b]-sr[a]).slice(0,8);
+  mkChart('cResiduo','bar',rk,rk.map(k=>+sr[k].toFixed(1)),{colors:PAL,o:{indexAxis:'y'}});
+
+  const rows=[...d].sort((a,b)=>b.data.localeCompare(a.data)).slice(0,120);
+  document.querySelector('#tbl tbody').innerHTML = rows.map(r=>`<tr>
+    <td>${(r.data||'').split('-').reverse().join('/')}</td><td>${r.obra}</td><td>${r.etapa}</td>
+    <td>${r.residuo}</td><td><span class="tag cl-${r.classe}">${r.classe}</span></td>
+    <td>${r.transportador}</td><td style="text-align:right">${r.quantidade.toFixed(1)}</td>
+    <td>${r.destino}</td>
+    <td><span class="tag" style="background:${STATUS_COR[r.status]}22;color:${STATUS_COR[r.status]}">${r.status}</span></td>
+  </tr>`).join('');
+
+  document.getElementById('foot').innerHTML =
+    'Dados extraídos do SP Regula (CTRs registradas) e classificados por etapa. Atualização automática semanal.' +
+    ' &nbsp;•&nbsp; Classes conforme Resolução CONAMA 307. &nbsp;•&nbsp; Terraplenagem, Demolição e Stand de Vendas são tratados como etapas próprias.';
+}
+['fObra','fEtapa','fPeriodo','fTransp'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+render();
+
+const ETAPAS = ['','Fundações','Estrutura e Vedações','Acabamentos','Terraplenagem','Limpeza do Terreno - Demolição','Stand de Vendas - Construção','Stand de Vendas - Demolição'];
+const ESTRUTURAS = ['','Concreto armado','Alvenaria estrutural','Estrutura metálica','Pré-moldado','Parede de concreto','Misto','Outro'];
+document.getElementById('oEtapa').innerHTML = ETAPAS.map(e=>`<option value="${e}">${e||'(a definir)'}</option>`).join('');
+function obrasComData(){ return uniq(RAW.map(r=>r.obra)); }
+
+let ATTRS = {}; try{ ATTRS = JSON.parse(localStorage.getItem('obra_attrs')||'{}'); }catch(e){ ATTRS={}; }
+function saveAttrs(){ try{ localStorage.setItem('obra_attrs', JSON.stringify(ATTRS)); }catch(e){} }
+function renderCarac(){
+  const tb=document.querySelector('#tblCarac tbody');
+  const obras=obrasComData();
+  if(!obras.length){ tb.innerHTML='<tr><td style="color:var(--slate)">Sem obras (aguardando extração).</td></tr>'; return; }
+  tb.innerHTML=obras.map(o=>{
+    const a=ATTRS[o]||{};
+    const of=ETAPAS.map(e=>`<option value="${e}" ${e===(a.fase||'')?'selected':''}>${e||'(a definir)'}</option>`).join('');
+    const oe=ESTRUTURAS.map(e=>`<option value="${e}" ${e===(a.estrutura||'')?'selected':''}>${e||'(a definir)'}</option>`).join('');
+    return `<tr data-o="${o}">
+      <td style="font-weight:600">${o}</td>
+      <td><select class="inp cFase">${of}</select></td>
+      <td><input class="inp cArea" type="number" min="0" style="width:110px" value="${a.area??''}"></td>
+      <td><select class="inp cEstr">${oe}</select></td>
+      <td><input class="inp cPav" type="number" min="0" style="width:80px" value="${a.pavimentos??''}"></td>
+      <td><input class="inp cTorres" type="number" min="0" style="width:70px" value="${a.torres??''}"></td>
+    </tr>`;
+  }).join('');
+  tb.querySelectorAll('tr[data-o]').forEach(tr=>{
+    const o=tr.dataset.o;
+    const upd=()=>{
+      ATTRS[o]={fase:tr.querySelector('.cFase').value,area:+tr.querySelector('.cArea').value||'',
+        estrutura:tr.querySelector('.cEstr').value,pavimentos:+tr.querySelector('.cPav').value||'',
+        torres:+tr.querySelector('.cTorres').value||''};
+      saveAttrs(); renderCmp();
+    };
+    tr.querySelectorAll('select,input').forEach(el=>el.addEventListener('change',upd));
+  });
+}
+
+const CMP_METRICAS=[['vol','Volume total (m³)'],['m2','m³ por m² de terreno'],['pav','m³ por pavimento'],['torre','m³ por torre'],['ctrs','Nº de CTRs']];
+function metricasObra(o){
+  const rs=RAW.filter(r=>r.obra===o);
+  const vol=rs.reduce((a,r)=>a+r.quantidade,0);
+  const a=ATTRS[o]||{};
+  return {obra:o, vol, ctrs:rs.length, fase:a.fase||'', estrutura:a.estrutura||'',
+    area:+a.area||0, pav:+a.pavimentos||0, torres:+a.torres||0,
+    m2:a.area?vol/a.area:0, pavM:a.pavimentos?vol/a.pavimentos:0, torreM:a.torres?vol/a.torres:0};
+}
+function selecionadas(){ return [...document.querySelectorAll('.cmpChk:checked')].map(c=>c.value); }
+function renderCmpChecks(){
+  const c=document.getElementById('cmpChecks');
+  const obras=obrasComData();
+  c.innerHTML=obras.length ? obras.map(o=>`<label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="cmpChk" value="${o}"> ${o}</label>`).join('')
+    : '<span style="font-size:12.5px;color:var(--slate)">Sem obras para comparar.</span>';
+  c.querySelectorAll('.cmpChk').forEach(ch=>ch.addEventListener('change',renderCmp));
+  document.getElementById('cmpMetrica').innerHTML=CMP_METRICAS.map(m=>`<option value="${m[0]}">${m[1]}</option>`).join('');
+  document.getElementById('cmpMetrica').addEventListener('change',renderCmpChart);
+}
+function renderCmpTabela(){
+  const t=document.getElementById('tblCmp');
+  const obras=selecionadas();
+  if(!obras.length){ t.innerHTML='<tbody><tr><td style="color:var(--slate);font-size:12.5px;padding:8px">Selecione obras acima para comparar.</td></tr></tbody>'; return; }
+  const f=(v,dec)=> v? (+v).toFixed(dec):'—';
+  const rows=obras.map(o=>{const m=metricasObra(o);return `<tr>
+    <td style="font-weight:600">${o}</td><td>${m.fase||'—'}</td>
+    <td style="text-align:right">${m.area||'—'}</td><td>${m.estrutura||'—'}</td>
+    <td style="text-align:right">${m.pav||'—'}</td><td style="text-align:right">${m.torres||'—'}</td>
+    <td style="text-align:right">${m.vol.toFixed(0)}</td><td style="text-align:right">${m.ctrs}</td>
+    <td style="text-align:right">${f(m.m2,3)}</td><td style="text-align:right">${f(m.pavM,1)}</td><td style="text-align:right">${f(m.torreM,1)}</td>
+  </tr>`;}).join('');
+  t.innerHTML=`<thead><tr><th>Obra</th><th>Fase</th><th>Área m²</th><th>Estrutura</th><th>Pav.</th><th>Torres</th><th>Vol m³</th><th>CTRs</th><th>m³/m²</th><th>m³/pav</th><th>m³/torre</th></tr></thead><tbody>${rows}</tbody>`;
+}
+function renderCmpChart(){
+  const obras=selecionadas();
+  const met=document.getElementById('cmpMetrica').value;
+  const key={vol:'vol',m2:'m2',pav:'pavM',torre:'torreM',ctrs:'ctrs'}[met];
+  const data=obras.map(o=>+(+metricasObra(o)[key]).toFixed(3));
+  if(charts['cCompara']) charts['cCompara'].destroy();
+  charts['cCompara']=new Chart(document.getElementById('cCompara'),{type:'bar',
+    data:{labels:obras,datasets:[{data,backgroundColor:'#F07E22',borderRadius:5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:11}}}}}});
+}
+function renderCmp(){ renderCmpTabela(); renderCmpChart(); }
+
+let NOVAS = []; try{ NOVAS = JSON.parse(localStorage.getItem('novas_obras')||'[]'); }catch(e){ NOVAS=[]; }
+function salvarNovas(){ try{ localStorage.setItem('novas_obras', JSON.stringify(NOVAS)); }catch(e){} }
+function renderObras(){
+  const w=document.getElementById('obrasWrap');
+  if(!NOVAS.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Nenhuma obra nova adicionada ainda.</p>'; return; }
+  w.innerHTML='<table><thead><tr><th>Obra</th><th>Login (CNPJ)</th><th>Senha</th><th>Etapa</th><th>Ativo</th><th></th></tr></thead><tbody>'+
+    NOVAS.map((o,i)=>`<tr><td>${o.obra}</td><td>${o.cnpj}</td><td>${o.senha}</td><td>${o.etapa||'(a definir)'}</td><td>${o.ativo}</td>
+      <td style="text-align:right"><button data-i="${i}" class="rmObra" style="border:1px solid var(--line);background:#fff;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;color:var(--red)">remover</button></td></tr>`).join('')+
+    '</tbody></table><button id="btCsv" class="btn" style="margin-top:12px">Baixar novas_obras.csv</button>';
+  w.querySelectorAll('.rmObra').forEach(b=>b.onclick=()=>{ NOVAS.splice(+b.dataset.i,1); salvarNovas(); renderObras(); });
+  document.getElementById('btCsv').onclick=baixarCsv;
+}
+function baixarCsv(){
+  const esc=v=>/[",;\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;
+  const linhas=[['Obra','Login (CNPJ)','Senha','Etapa Atual','Ativo']].concat(NOVAS.map(o=>[o.obra,o.cnpj,o.senha,o.etapa,o.ativo]));
+  const csv='﻿'+linhas.map(l=>l.map(esc).join(',')).join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='novas_obras.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('btAdd').onclick=()=>{
+  const obra=document.getElementById('oNome').value.trim();
+  const cnpj=document.getElementById('oCnpj').value.replace(/\D/g,'');
+  const senha=document.getElementById('oSenha').value.trim();
+  const etapa=document.getElementById('oEtapa').value;
+  const ativo=document.getElementById('oAtivo').value;
+  if(!obra||!cnpj||!senha){ alert('Preencha Obra, Login (CNPJ) e Senha.'); return; }
+  NOVAS.push({obra,cnpj,senha,etapa,ativo}); salvarNovas(); renderObras();
+  document.getElementById('oNome').value=''; document.getElementById('oCnpj').value='';
+  document.getElementById('oSenha').value='conx2016'; document.getElementById('oEtapa').value=''; document.getElementById('oNome').focus();
+};
+
+renderCarac(); renderCmpChecks(); renderCmp(); renderObras();
+</script>
+</body>
+</html>
