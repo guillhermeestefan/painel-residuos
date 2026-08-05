@@ -196,10 +196,11 @@ const uniq=a=>[...new Set(a)].sort();
 const charts={};
 function opt(sel,arr,all){const el=document.getElementById(sel);const p=el.value;el.innerHTML=`<option value="__all">${all}</option>`+arr.map(v=>`<option>${v}</option>`).join('');if(p&&[...el.options].some(o=>o.value===p))el.value=p;}
 function refreshFiltros(){
-  opt('fEtapa',uniq(RAW.map(r=>r.etapa)),'Todas as etapas');
+  const etapasAll=uniq([...FLUXO,'Não informada',...RAW.map(r=>r.etapa)]);
+  opt('fEtapa',etapasAll,'Todas as etapas');
   opt('fTransp',uniq(RAW.map(r=>r.transportador)),'Todos');
   const ce=document.getElementById('cmpEtapa');const pv=ce.value;
-  ce.innerHTML=`<option value="__all">Só construtivas</option>`+uniq(RAW.map(r=>r.etapa)).map(v=>`<option>${v}</option>`).join('');
+  ce.innerHTML=`<option value="__all">Só construtivas</option>`+etapasAll.map(v=>`<option>${v}</option>`).join('');
   if(pv&&[...ce.options].some(o=>o.value===pv))ce.value=pv;
 }
 refreshFiltros();
