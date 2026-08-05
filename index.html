@@ -77,6 +77,7 @@
       <option value="28">Últimas 4 semanas</option><option value="90">Últimos 90 dias</option>
       <option value="180">Últimos 6 meses</option><option value="365">Últimos 12 meses</option>
       <option value="9999" selected>Tudo</option></select></div>
+    <div><label class="lbl">Ou por data (de / até)</label><span style="display:flex;gap:6px;align-items:center"><input type="date" id="pDe"><input type="date" id="pAte"></span></div>
     <div><label class="lbl">Transportador</label><select id="fTransp"></select></div>
   </div>
 
@@ -87,22 +88,26 @@
   </div>
 
   <div class="checkbar">
-    <div class="top"><span class="lbl" style="margin:0">Tipos de resíduo — marque os que quer analisar</span>
+    <div class="top"><button id="rToggle" class="inp" style="cursor:pointer;font-weight:600">Tipos de resíduo ▾</button>
       <span><button id="rSelAll" class="inp" style="cursor:pointer;margin-right:6px">Marcar todos</button><button id="rSelNone" class="inp" style="cursor:pointer">Desmarcar todos</button></span></div>
-    <div id="rChecks" class="list"></div>
+    <div id="rChecks" class="list" style="display:none;margin-top:8px"></div>
   </div>
 
   <div class="kpis" id="kpis"></div>
   <div class="summary" id="summary"></div>
 
-  <div class="grid three">
+  <div class="grid">
     <div class="panel"><h3><span class="ttl">Resíduos por etapa da obra (m³)</span></h3><div class="cwrap"><canvas id="cEtapa"></canvas></div></div>
     <div class="panel"><h3><span class="ttl">Por classe (CONAMA 307)</span></h3><div class="cwrap"><canvas id="cClasse"></canvas></div></div>
-    <div class="panel"><h3><span class="ttl">Situação das CTRs</span></h3><div class="cwrap"><canvas id="cStatus"></canvas></div></div>
   </div>
 
   <div class="grid">
     <div class="panel"><h3><span class="ttl">Volume por obra (m³) — etapas construtivas</span></h3><div class="cwrap"><canvas id="cObra"></canvas></div></div>
+    <div class="panel"><h3><span class="ttl">Volume de entulho por área construída (m³/m²)</span></h3><div class="cwrap"><canvas id="cM2"></canvas></div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel"><h3><span class="ttl">Orçado vs Realizado — entulho por obra (m³)</span></h3><div class="cwrap"><canvas id="cOrc"></canvas></div></div>
     <div class="panel">
       <h3><span class="ttl">Evolução mensal (m³) — etapas construtivas</span>
         <span style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0"><span style="font-size:11px;color:var(--slate)">de</span><input type="month" id="evDe"><span style="font-size:11px;color:var(--slate)">até</span><input type="month" id="evAte"></span>
@@ -114,11 +119,6 @@
   <div class="grid">
     <div class="panel"><h3><span class="ttl">Por transportador (m³)</span></h3><div class="cwrap"><canvas id="cTransp"></canvas></div></div>
     <div class="panel"><h3><span class="ttl">Percentual por tipo de resíduo — etapas construtivas</span></h3><div class="cwrap"><canvas id="cResiduo"></canvas></div></div>
-  </div>
-
-  <div class="grid">
-    <div class="panel"><h3><span class="ttl">Volume de entulho por área construída (m³/m²)</span></h3><div class="cwrap"><canvas id="cM2"></canvas></div></div>
-    <div class="panel"><h3><span class="ttl">Orçado vs Realizado — entulho por obra (m³)</span></h3><div class="cwrap"><canvas id="cOrc"></canvas></div></div>
   </div>
 
   <div class="panel" style="margin-top:16px">
@@ -159,7 +159,7 @@ const PAL=['#F07E22','#2C4E7A','#2E9E5B','#E0A423','#7B61B5','#3E7CB1','#C0463B'
 const STATUS_COR={'Pendente Envio':'#E0A423','Pendente Recebimento':'#2C4E7A','Em Obra':'#F07E22','Em Trânsito':'#7B61B5','Baixada':'#2E9E5B','Recusada no Destino Final':'#C0463B'};
 const STATUS_ORDEM=['Pendente Envio','Pendente Recebimento','Em Obra','Em Trânsito','Baixada','Recusada no Destino Final'];
 const RES_CLASSE={'Concreto/Argamassa/Alvenaria/Cerâmicos':'A','Solo/Terra':'A','Blocos/Telhas':'A','Madeira':'B','Metal':'B','Papel/Papelão':'B','Plástico':'B','Gesso':'B','Resíduo misturado (sem separação)':'C','Lã de vidro/rocha':'C','Tintas/Solventes/Óleo':'D','Amianto':'D','Lâmpadas/Baterias':'D'};
-const FLUXO=['Limpeza do Terreno','Stand de Vendas - Construção','Fundações','Estrutura','Estrutura e Acabamentos','Acabamentos'];
+const FLUXO=['Limpeza do Terreno','Stand de Vendas - Construção','Fundações','Estrutura','Estrutura e Acabamentos','Acabamentos','Terraplenagem','Stand de Vendas - Demolição'];
 const NAO_CONSTRUTIVAS=new Set(['Terraplenagem','Limpeza do Terreno','Stand de Vendas - Construção','Stand de Vendas - Demolição']);
 const ESTRUTURAS=['','Alvenaria estrutural','Concreto armado'];
 const FATOR_ORC={'Alvenaria estrutural':0.2,'Concreto armado':0.22};
@@ -175,8 +175,8 @@ let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
 function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){}}
 
-function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava/.test(r))return 'Terraplenagem'; if(/stand/.test(r))return 'Stand de Vendas - Demolição'; if(/demoli/.test(r))return 'Limpeza do Terreno'; return null;}
-function faseNaData(obra,dataISO){const fs=(ATTRS[obra]&&ATTRS[obra].fases)||[];const ord=fs.filter(f=>f.etapa&&f.data).sort((a,b)=>a.data.localeCompare(b.data));let cur=null;for(const f of ord){if(f.data<=dataISO)cur=f.etapa;}return cur;}
+function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava|inerte/.test(r))return 'Terraplenagem'; if(/stand/.test(r))return 'Stand de Vendas - Demolição'; if(/demoli/.test(r))return 'Limpeza do Terreno'; return null;}
+function faseNaData(obra,dataISO){const fs=(ATTRS[obra]&&ATTRS[obra].fases)||[];const ord=fs.filter(f=>f.etapa&&f.data).sort((a,b)=>a.data.localeCompare(b.data));let cur=null;for(const f of ord){if(f.data<=dataISO && (!f.dataFim||dataISO<=f.dataFim))cur=f.etapa;}return cur;}
 function recomputeEtapas(){RAW.forEach(r=>{const esp=etapaEspecial(r.residuo);r.etapa=esp||faseNaData(r.obra,r.data)||r.etapaOrig||'Não informada';});}
 recomputeEtapas();
 
@@ -214,8 +214,17 @@ document.getElementById('rSelNone').onclick=()=>{RES_SEL=new Set();renderRChecks
 
 function filtrar(){
   const e=fEtapa.value,t=fTransp.value,dias=+fPeriodo.value;
-  const lim=new Date();lim.setDate(lim.getDate()-dias);
-  return RAW.filter(r=> OBRAS_SEL.has(r.obra) && (e==='__all'||r.etapa===e) && (t==='__all'||r.transportador===t) && RES_SEL.has(r.residuo) && (dias>=9999||new Date(r.data)>=lim));
+  const pDe=document.getElementById('pDe').value,pAte=document.getElementById('pAte').value;
+  const lim=new Date();lim.setDate(lim.getDate()-dias);const limISO=lim.toISOString().slice(0,10);
+  return RAW.filter(r=>{
+    if(!OBRAS_SEL.has(r.obra))return false;
+    if(!(e==='__all'||r.etapa===e))return false;
+    if(!(t==='__all'||r.transportador===t))return false;
+    if(!RES_SEL.has(r.residuo))return false;
+    if(pDe||pAte){ if(pDe&&r.data<pDe)return false; if(pAte&&r.data>pAte)return false; }
+    else if(dias<9999 && r.data<limISO)return false;
+    return true;
+  });
 }
 const construtivo=arr=>arr.filter(r=>!NAO_CONSTRUTIVAS.has(r.etapa));
 function soma(arr,key){const m={};arr.forEach(r=>m[r[key]]=(m[r[key]]||0)+r.quantidade);return m;}
@@ -258,7 +267,6 @@ function render(){
   barPct('cEtapa',Object.keys(se),Object.values(se).map(v=>+v.toFixed(1)),{horiz:true});
   const scl={A:0,B:0,C:0,D:0};d.forEach(r=>scl[r.classe]=(scl[r.classe]||0)+r.quantidade);
   donutPct('cClasse',['A - reutilizável/reciclável','B - reciclável','C - sem tecnologia','D - perigoso'],[scl.A,scl.B,scl.C,scl.D].map(v=>+v.toFixed(1)),['#3E7CB1','#2E9E5B','#E0A423','#C0463B']);
-  donutPct('cStatus',STATUS_ORDEM,STATUS_ORDEM.map(s=>c[s]||0),STATUS_ORDEM.map(s=>STATUS_COR[s]),'CTRs');
 
   const so=soma(dc,'obra');
   barPct('cObra',Object.keys(so),Object.values(so).map(v=>+v.toFixed(1)));
@@ -278,13 +286,16 @@ function render(){
   const pl=topR.slice();const pv=topR.map(k=>+sr[k].toFixed(1));if(outros>0){pl.push('Outros');pv.push(+outros.toFixed(1));}
   donutPct('cResiduo',pl,pv,PAL);
 
-  // m³ / m² construída por obra
+  // Volume de entulho por área construída (m³/m²) com índice-premissa
   const obrasSel=[...OBRAS_SEL];
   const volObra=soma(dc,'obra');
-  const m2labels=[],m2vals=[];
-  obrasSel.forEach(o=>{const a=+(ATTRS[o]&&ATTRS[o].area)||0;if(a>0){m2labels.push(o);m2vals.push(+((volObra[o]||0)/a).toFixed(3));}});
+  const m2labels=[],m2real=[],m2idx=[];
+  obrasSel.forEach(o=>{const a=+(ATTRS[o]&&ATTRS[o].area)||0;const est=(ATTRS[o]&&ATTRS[o].estrutura)||'';if(a>0){m2labels.push(o);m2real.push(+((volObra[o]||0)/a).toFixed(3));m2idx.push(FATOR_ORC[est]?+FATOR_ORC[est]:null);}});
   if(charts['cM2'])charts['cM2'].destroy();
-  charts['cM2']=new Chart(document.getElementById('cM2'),{type:'bar',data:{labels:m2labels.length?m2labels:['—'],datasets:[{data:m2labels.length?m2vals:[0],backgroundColor:'#2C4E7A',borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${nf(ctx.raw,3)} m³/m²`}}},scales:{y:{beginAtZero:true}}}});
+  charts['cM2']=new Chart(document.getElementById('cM2'),{type:'bar',data:{labels:m2labels.length?m2labels:['—'],datasets:[
+    {label:'Realizado (m³/m²)',data:m2labels.length?m2real:[0],backgroundColor:'#2C4E7A',borderRadius:4},
+    {label:'Índice premissa (m³/m²)',data:m2labels.length?m2idx:[0],backgroundColor:'#8A8F98',borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${nf(ctx.raw,3)} m³/m²`}}},scales:{y:{beginAtZero:true},x:{ticks:{font:{size:10}}}}}});
 
   // Orçado vs Realizado (entulho construtivo)
   const oL=[],orc=[],real=[];
@@ -297,7 +308,8 @@ function render(){
 
   document.getElementById('foot').innerHTML='Etapas seguem o histórico de fases de cada obra (Master): ao mudar de fase, a anterior congela e a nova começa do zero. Gráficos de volume por obra, evolução, tipo de resíduo, m³/m² e orçado×realizado desconsideram Terraplenagem, Limpeza do Terreno, Stand de Vendas (Construção e Demolição). Premissa de orçamento: Alvenaria estrutural 0,2 m³/m²; Concreto armado 0,22 m³/m². Percentuais mostrados nos tooltips e legendas.';
 }
-['fEtapa','fPeriodo','fTransp','evDe','evAte'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+['fEtapa','fPeriodo','fTransp','evDe','evAte','pDe','pAte'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+document.getElementById('rToggle').onclick=()=>{const el=document.getElementById('rChecks');const vis=el.style.display!=='none';el.style.display=vis?'none':'flex';document.getElementById('rToggle').textContent='Tipos de resíduo '+(vis?'▾':'▴');};
 
 // datas padrão do intervalo mensal
 (function(){const ms=RAW.map(r=>(r.data||'').slice(0,7)).filter(Boolean).sort();if(ms.length){document.getElementById('evDe').value=ms[0];document.getElementById('evAte').value=ms[ms.length-1];}})();
@@ -305,7 +317,7 @@ function render(){
 renderObraChecks(); renderRChecks(); render();
 
 /* ===== Comparar obras ===== */
-const CMP_METRICAS=[['vol','Volume (m³)'],['m2','m³ por m² construída'],['ctrs','Nº de CTRs']];
+const CMP_METRICAS=[['vol','Volume de Entulho (m³)'],['m2','m³ por m² construída'],['ctrs','Nº de CTRs']];
 function metricasObra(o){
   const et=document.getElementById('cmpEtapa').value;
   const rs=RAW.filter(r=>r.obra===o && (et==='__all'? !NAO_CONSTRUTIVAS.has(r.etapa) : r.etapa===et));
@@ -345,7 +357,7 @@ function renderCarac(){
   if(!obras.length){w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem obras.</p>';return;}
   w.innerHTML=obras.map(o=>{const a=ATTRS[o]||{};const fases=a.fases||[];
     const oe=ESTRUTURAS.map(e=>`<option value="${e}" ${e===(a.estrutura||'')?'selected':''}>${e||'(a definir)'}</option>`).join('');
-    const fr=fases.map((f,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:5px" data-i="${i}"><select class="inp fEt" style="min-width:220px">${FLUXO.map(e=>`<option ${e===f.etapa?'selected':''}>${e}</option>`).join('')}</select><input class="inp fDt" type="date" value="${f.data||''}"><button class="btn sm fRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></div>`).join('');
+    const fr=fases.map((f,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;flex-wrap:wrap" data-i="${i}"><select class="inp fEt" style="min-width:220px">${FLUXO.map(e=>`<option ${e===f.etapa?'selected':''}>${e}</option>`).join('')}</select><span style="font-size:11px;color:var(--slate)">início</span><input class="inp fDt" type="date" value="${f.data||''}"><span style="font-size:11px;color:var(--slate)">fim</span><input class="inp fDtF" type="date" value="${f.dataFim||''}"><button class="btn sm fRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></div>`).join('');
     return `<div class="ocard" data-o="${o}"><div style="font-weight:600;margin-bottom:8px">${o}</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
         <div><label class="lbl">Área construída (m²)</label><input class="inp aArea" type="number" min="0" style="width:140px" value="${a.area??''}"></div>
@@ -359,8 +371,8 @@ function renderCarac(){
     const o=card.dataset.o;const ensure=()=>{ATTRS[o]=ATTRS[o]||{};ATTRS[o].fases=ATTRS[o].fases||[];};
     const salvarBasico=()=>{ensure();ATTRS[o].area=+card.querySelector('.aArea').value||'';ATTRS[o].estrutura=card.querySelector('.aEstr').value;saveAttrs();render();renderCmp();};
     card.querySelectorAll('.aArea,.aEstr').forEach(el=>el.addEventListener('change',salvarBasico));
-    const salvarFases=()=>{ensure();ATTRS[o].fases=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value}));saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
-    card.querySelectorAll('.fEt,.fDt').forEach(el=>el.addEventListener('change',salvarFases));
+    const salvarFases=()=>{ensure();ATTRS[o].fases=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
+    card.querySelectorAll('.fEt,.fDt,.fDtF').forEach(el=>el.addEventListener('change',salvarFases));
     card.querySelectorAll('.fRm').forEach(b=>b.addEventListener('click',()=>{ensure();ATTRS[o].fases.splice(+b.closest('[data-i]').dataset.i,1);saveAttrs();recomputeEtapas();refreshFiltros();render();renderCarac();renderCmp();}));
     card.querySelector('.addFase').addEventListener('click',()=>{ensure();ATTRS[o].fases.push({etapa:FLUXO[0],data:''});saveAttrs();renderCarac();});
   });
