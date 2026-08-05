@@ -14,44 +14,44 @@
     --blue:#3E7CB1; --green:#2E9E5B; --amber:#E0A423; --red:#C0463B; --violet:#7B61B5; --navy2:#2C4E7A;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);padding:0 0 40px}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);padding:0 0 40px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-weight:400;letter-spacing:.1px}
   .appbar{background:#fff;border-bottom:3px solid var(--orange);padding:14px 26px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
   .brand{display:flex;align-items:center;gap:16px}
   .logo{height:34px;width:auto;display:block}
-  .brand h1{font-size:17px;color:var(--ink);font-weight:700}
+  .brand h1{font-size:16px;color:var(--ink);font-weight:600;letter-spacing:.2px}
   .brand .sub{font-size:12px;color:var(--slate);margin-top:2px}
   .brand .sub b{color:var(--orange)}
   .rightbar{display:flex;align-items:center;gap:14px}
   .updated{font-size:12px;color:var(--slate);text-align:right}
   .updated b{color:var(--ink)}
-  .master-btn{font-size:12.5px;font-weight:600;color:var(--orange);border:1px solid var(--cream-bd);background:var(--cream);border-radius:8px;padding:7px 12px;cursor:pointer}
+  .master-btn{font-size:12.5px;font-weight:500;color:var(--orange);border:1px solid var(--cream-bd);background:var(--cream);border-radius:8px;padding:7px 12px;cursor:pointer}
   .wrap{padding:20px 26px 0}
   .filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-  .lbl{font-size:11px;color:var(--slate);display:block;margin-bottom:4px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  .lbl{font-size:11px;color:var(--slate);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
   .filters select, .selmini{padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px;color:var(--ink)}
   .filters select{min-width:170px}
   .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 1px 2px rgba(20,40,60,.04);border-top:3px solid var(--slate)}
-  .kpi .n{font-size:26px;font-weight:800;line-height:1;color:var(--ink)}
-  .kpi .l{font-size:11.5px;color:var(--slate);margin-top:6px;font-weight:600}
+  .kpi .n{font-size:27px;font-weight:500;line-height:1;color:var(--ink);letter-spacing:.3px}
+  .kpi .l{font-size:11.5px;color:var(--slate);margin-top:6px;font-weight:500}
   .kpi.k0{border-top-color:var(--amber)} .kpi.k1{border-top-color:var(--navy2)}
   .kpi.k2{border-top-color:var(--orange)} .kpi.k3{border-top-color:var(--violet)}
   .kpi.k4{border-top-color:var(--green)} .kpi.k5{border-top-color:var(--red)}
   .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:16px}
   .grid.three{grid-template-columns:1.3fr 1fr 1fr}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,40,60,.04)}
-  .panel h3{font-size:13px;color:var(--ink);margin-bottom:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .panel h3{font-size:13px;color:var(--ink);margin-bottom:12px;font-weight:600;letter-spacing:.2px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
   .panel h3 .ttl::before{content:"";display:inline-block;width:7px;height:7px;background:var(--orange);border-radius:2px;margin-right:8px;vertical-align:middle}
   .panel .cwrap{position:relative;height:250px}
   .summary{display:flex;gap:20px;flex-wrap:wrap;background:var(--cream);border:1px solid var(--cream-bd);border-radius:12px;padding:15px 20px;margin-bottom:18px}
-  .summary .item .v{font-size:22px;font-weight:800;color:var(--orange)}
-  .summary .item .k{font-size:11.5px;color:var(--slate);margin-top:2px;font-weight:600}
+  .summary .item .v{font-size:23px;font-weight:500;color:var(--orange);letter-spacing:.3px}
+  .summary .item .k{font-size:11.5px;color:var(--slate);margin-top:2px;font-weight:500}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th{background:#FAFBFC;text-align:left;padding:9px 10px;color:var(--slate);font-weight:700;font-size:11px;letter-spacing:.3px;text-transform:uppercase;border-bottom:2px solid var(--line)}
+  th{background:#FAFBFC;text-align:left;padding:9px 10px;color:var(--slate);font-weight:600;font-size:11px;letter-spacing:.3px;text-transform:uppercase;border-bottom:2px solid var(--line)}
   td{padding:8px 10px;border-bottom:1px solid var(--line)}
   .tbl-wrap{max-height:none;overflow:auto}
   .inp{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:#fff;color:var(--ink)}
-  .btn{padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn{padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
   .btn.sm{padding:5px 11px;font-size:12px}
   .chk{font-size:12.5px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink)}
   .masteronly{display:none}
@@ -92,7 +92,7 @@
 
   <div class="panel" style="margin-bottom:18px;padding:12px 16px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-      <span class="lbl" style="margin:0">Tipos de resíduo — marque os que quer analisar</span>
+      <span class="lbl" style="margin:0">Classe de material (CONAMA 307) — marque as que quer analisar</span>
       <span><button id="rSelAll" class="inp" style="cursor:pointer;margin-right:6px">Marcar todos</button><button id="rSelNone" class="inp" style="cursor:pointer">Desmarcar todos</button></span>
     </div>
     <div id="rChecks" style="display:flex;flex-wrap:wrap;gap:6px 16px"></div>
@@ -109,9 +109,7 @@
 
   <div class="grid">
     <div class="panel">
-      <h3><span class="ttl">Volume por obra (m³)</span>
-        <span id="volClasse" style="display:flex;gap:10px"></span>
-      </h3>
+      <h3><span class="ttl">Volume por obra (m³)</span></h3>
       <div class="cwrap"><canvas id="cObra"></canvas></div>
     </div>
     <div class="panel">
@@ -241,29 +239,23 @@ function refreshFiltros(){
 }
 refreshFiltros();
 
-const RES_TIPOS = uniq(RAW.map(r=>r.residuo));
-let RES_SEL = new Set(RES_TIPOS);
+const CLASSES = ['A','B','C','D'];
+const CLASSE_DESC = {A:'A — reutilizável/reciclável', B:'B — reciclável', C:'C — sem tecnologia', D:'D — perigoso'};
+let CLASSE_SEL = new Set(CLASSES);
 function renderRChecks(){
   const c=document.getElementById('rChecks');
-  c.innerHTML = RES_TIPOS.length ? RES_TIPOS.map((t,i)=>`<label class="chk"><input type="checkbox" class="rChk" data-i="${i}" ${RES_SEL.has(t)?'checked':''}> ${t}</label>`).join('') : '<span style="font-size:12px;color:var(--slate)">Sem dados.</span>';
-  c.querySelectorAll('.rChk').forEach(ch=>ch.addEventListener('change',()=>{ const t=RES_TIPOS[+ch.dataset.i]; if(ch.checked)RES_SEL.add(t); else RES_SEL.delete(t); render(); }));
+  c.innerHTML = CLASSES.map(k=>`<label class="chk"><input type="checkbox" class="rChk" value="${k}" ${CLASSE_SEL.has(k)?'checked':''}> ${CLASSE_DESC[k]}</label>`).join('');
+  c.querySelectorAll('.rChk').forEach(ch=>ch.addEventListener('change',()=>{ if(ch.checked)CLASSE_SEL.add(ch.value); else CLASSE_SEL.delete(ch.value); render(); }));
 }
-document.getElementById('rSelAll').onclick=()=>{ RES_SEL=new Set(RES_TIPOS); renderRChecks(); render(); };
-document.getElementById('rSelNone').onclick=()=>{ RES_SEL=new Set(); renderRChecks(); render(); };
-
-let VOL_CLASSE = new Set(['A','B','C','D']);
-function renderVolClasse(){
-  const c=document.getElementById('volClasse');
-  c.innerHTML = ['A','B','C','D'].map(k=>`<label class="chk"><input type="checkbox" class="vcChk" value="${k}" ${VOL_CLASSE.has(k)?'checked':''}> ${k}</label>`).join('');
-  c.querySelectorAll('.vcChk').forEach(ch=>ch.addEventListener('change',()=>{ if(ch.checked)VOL_CLASSE.add(ch.value); else VOL_CLASSE.delete(ch.value); render(); }));
-}
+document.getElementById('rSelAll').onclick=()=>{ CLASSE_SEL=new Set(CLASSES); renderRChecks(); render(); };
+document.getElementById('rSelNone').onclick=()=>{ CLASSE_SEL=new Set(); renderRChecks(); render(); };
 
 function filtrar(){
   const o=fObra.value, e=fEtapa.value, t=fTransp.value, dias=+fPeriodo.value;
   const limite=new Date(); limite.setDate(limite.getDate()-dias);
   return RAW.filter(r=>
     (o==='__all'||r.obra===o) && (e==='__all'||r.etapa===e) &&
-    (t==='__all'||r.transportador===t) && RES_SEL.has(r.residuo) &&
+    (t==='__all'||r.transportador===t) && CLASSE_SEL.has(r.classe) &&
     (dias>=9999 || new Date(r.data)>=limite));
 }
 function soma(arr,key){const m={};arr.forEach(r=>m[r[key]]=(m[r[key]]||0)+r.quantidade);return m;}
@@ -300,13 +292,18 @@ function render(){
   const se=soma(d,'etapa');
   mkChart('cEtapa','bar',Object.keys(se),Object.values(se),{colors:PAL,o:{indexAxis:'y'}});
   const scl={A:0,B:0,C:0,D:0}; d.forEach(r=>scl[r.classe]=(scl[r.classe]||0)+r.quantidade);
-  mkChart('cClasse','doughnut',['A - reutilizável/reciclável','B - reciclável','C - sem tecnologia','D - perigoso'],Object.values(scl),{colors:['#3E7CB1','#2E9E5B','#E0A423','#C0463B'],legend:true,noScale:true});
+  const clvals=[scl.A,scl.B,scl.C,scl.D].map(v=>+v.toFixed(1));
+  const cltot=clvals.reduce((a,v)=>a+v,0)||1;
+  const clbase=['A - reutilizável/reciclável','B - reciclável','C - sem tecnologia','D - perigoso'];
+  if(charts['cClasse']) charts['cClasse'].destroy();
+  charts['cClasse']=new Chart(document.getElementById('cClasse'),{type:'doughnut',
+    data:{labels:clbase.map((l,i)=>`${l} (${(clvals[i]/cltot*100).toFixed(1)}%)`),datasets:[{data:clvals,backgroundColor:['#3E7CB1','#2E9E5B','#E0A423','#C0463B']}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:(ctx)=>` ${ctx.parsed.toFixed(1)} m³ (${(ctx.parsed/cltot*100).toFixed(1)}%)`}}}}});
   const scont=STATUS_ORDEM.map(s=>c[s]||0);
   mkChart('cStatus','doughnut',STATUS_ORDEM,scont,{colors:STATUS_ORDEM.map(s=>STATUS_COR[s]),legend:true,noScale:true});
 
-  // Volume por obra (com filtro de classe)
-  const dObra=d.filter(r=>VOL_CLASSE.has(r.classe));
-  const so=soma(dObra,'obra');
+  // Volume por obra
+  const so=soma(d,'obra');
   mkChart('cObra','bar',Object.keys(so),Object.values(so).map(v=>+v.toFixed(1)),{colors:PAL});
 
   // Evolução mensal (com filtro de período)
@@ -339,7 +336,7 @@ function render(){
     ' &nbsp;•&nbsp; Classes conforme CONAMA 307. &nbsp;•&nbsp; Terraplenagem, Demolição e Stand de Vendas são etapas próprias.';
 }
 ['fObra','fEtapa','fPeriodo','fTransp','evPeriodo'].forEach(id=>document.getElementById(id).addEventListener('change',render));
-renderRChecks(); renderVolClasse(); render();
+renderRChecks(); render();
 
 /* ===== Comparar obras (com etapa) ===== */
 const CMP_METRICAS=[['vol','Volume total (m³)'],['m2','m³ por m² de terreno'],['pav','m³ por pavimento'],['torre','m³ por torre'],['ctrs','Nº de CTRs']];
@@ -411,7 +408,7 @@ function renderCarac(){
         <button class="btn sm fRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button>
       </div>`).join('');
     return `<div class="ocard" data-o="${o}">
-      <div style="font-weight:700;margin-bottom:8px">${o}</div>
+      <div style="font-weight:600;margin-bottom:8px">${o}</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
         <div><label class="lbl">Área terreno (m²)</label><input class="inp aArea" type="number" min="0" style="width:120px" value="${a.area??''}"></div>
         <div><label class="lbl">Estrutura</label><select class="inp aEstr" style="min-width:180px">${oe}</select></div>
