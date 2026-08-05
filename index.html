@@ -329,7 +329,7 @@ document.getElementById('rToggle').onclick=()=>{const el=document.getElementById
 renderObraChecks(); renderRChecks(); render();
 
 /* ===== Comparar obras ===== */
-const CMP_METRICAS=[['vol','Volume de Entulho (m³)'],['m2','m³ por m² construída'],['ctrs','Nº de CTRs']];
+const CMP_METRICAS=[['vol','Volume de Entulho (m³)'],['m2','Volume de entulho por área construída (m³ / m²)'],['ctrs','Nº de CTRs']];
 function metricasObra(o){
   const et=document.getElementById('cmpEtapa').value;
   const rs=RAW.filter(r=>r.obra===o && (et==='__all'? !NAO_CONSTRUTIVAS.has(r.etapa) : r.etapa===et));
