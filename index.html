@@ -165,10 +165,22 @@ const ESTRUTURAS=['','Alvenaria estrutural','Concreto armado'];
 const FATOR_ORC={'Alvenaria estrutural':0.2,'Concreto armado':0.22};
 const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const nf=(v,d=1)=>(+v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+function grupoResiduo(res){
+  const s=strip(res);
+  if(/solo|terrapl|escava/.test(s)) return 'Solo / Terraplenagem';
+  if(/inerte/.test(s)) return 'Inertes';
+  if(/gesso/.test(s)) return 'Gesso';
+  if(s==='madeira') return 'Madeira';
+  if(/concreto|argamassa|alvenaria|ceramic|entulho|bloco|telha|tijolo/.test(s)) return 'Entulho (concreto, argamassa, alvenaria, cerâmicos)';
+  if(/emb|lata|tinta|solvente|plastic|papel|papelao|metal|vidro|isopor|cobre|aluminio|aco|ferro|poda|sucata/.test(s)) return 'Embalagens / recicláveis (plástico, papel, metal, madeira)';
+  if(/misturad/.test(s)) return 'Resíduos misturados';
+  if(!s||s==='nan'||/nao informado/.test(s)) return 'Não informado';
+  return res;
+}
 
 let RAW=(window.DADOS_CTR&&window.DADOS_CTR.length)?window.DADOS_CTR:[];
 const SEM_DADOS=RAW.length===0;
-RAW.forEach(r=>{ if(!r.classe) r.classe=RES_CLASSE[r.residuo]||'C'; r.quantidade=+r.quantidade||0; r.etapaOrig=r.etapa; if(!r.residuo||strip(r.residuo)==='nan') r.residuo='Não informado'; });
+RAW.forEach(r=>{ if(!r.classe) r.classe=RES_CLASSE[r.residuo]||'C'; r.quantidade=+r.quantidade||0; r.etapaOrig=r.etapa; if(!r.residuo||strip(r.residuo)==='nan') r.residuo='Não informado'; r.residuoGrupo=grupoResiduo(r.residuo); });
 if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:var(--cream);border:1px solid var(--cream-bd);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13.5px';b.textContent='Ainda sem dados. A atualização automática vai preencher o painel.';document.querySelector('.wrap').prepend(b);}
 
 let ATTRS={};
@@ -202,7 +214,7 @@ function renderObraChecks(){
 document.getElementById('oSelAll').onclick=()=>{OBRAS_SEL=new Set(OBRAS);renderObraChecks();render();renderCmp();};
 document.getElementById('oSelNone').onclick=()=>{OBRAS_SEL=new Set();renderObraChecks();render();renderCmp();};
 
-const RES_TIPOS=uniq(RAW.map(r=>r.residuo));
+const RES_TIPOS=uniq(RAW.map(r=>r.residuoGrupo));
 let RES_SEL=new Set(RES_TIPOS);
 function renderRChecks(){
   const c=document.getElementById('rChecks');
@@ -220,7 +232,7 @@ function filtrar(){
     if(!OBRAS_SEL.has(r.obra))return false;
     if(!(e==='__all'||r.etapa===e))return false;
     if(!(t==='__all'||r.transportador===t))return false;
-    if(!RES_SEL.has(r.residuo))return false;
+    if(!RES_SEL.has(r.residuoGrupo))return false;
     if(pDe||pAte){ if(pDe&&r.data<pDe)return false; if(pAte&&r.data>pAte)return false; }
     else if(dias<9999 && r.data<limISO)return false;
     return true;
@@ -281,7 +293,7 @@ function render(){
   const st=soma(d,'transportador');
   barPct('cTransp',Object.keys(st),Object.values(st).map(v=>+v.toFixed(1)),{horiz:true});
 
-  const sr=soma(dc,'residuo');const rk=Object.keys(sr).sort((a,b)=>sr[b]-sr[a]);
+  const sr=soma(dc,'residuoGrupo');const rk=Object.keys(sr).sort((a,b)=>sr[b]-sr[a]);
   const topR=rk.slice(0,9);const outros=rk.slice(9).reduce((a,k)=>a+sr[k],0);
   const pl=topR.slice();const pv=topR.map(k=>+sr[k].toFixed(1));if(outros>0){pl.push('Outros');pv.push(+outros.toFixed(1));}
   donutPct('cResiduo',pl,pv,PAL);
