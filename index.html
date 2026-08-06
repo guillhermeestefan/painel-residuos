@@ -44,6 +44,10 @@
   th{background:#FAFBFC;text-align:left;padding:9px 10px;color:var(--slate);font-weight:600;font-size:11px;letter-spacing:.3px;text-transform:uppercase;border-bottom:2px solid var(--line)}
   td{padding:8px 10px;border-bottom:1px solid var(--line)}
   #tblCmp th,#tblCmp td{text-align:center}
+  .panel h3 .ttl{cursor:pointer}
+  .panel h3 .ttl::after{content:' \24D8';color:var(--slate);font-size:11px;font-weight:400}
+  .calcbase{display:none;margin-top:10px;font-size:11.5px;color:var(--slate);background:#FAFBFC;border:1px solid var(--line);border-radius:8px;padding:9px 11px;line-height:1.55}
+  .calcbase b{color:var(--ink)}
   .tbl-wrap{overflow:auto}
   .inp{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:#fff;color:var(--ink)}
   .btn{padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
@@ -97,29 +101,38 @@
   <div class="kpis" id="kpis"></div>
   <div class="summary" id="summary"></div>
 
-  <div class="grid">
-    <div class="panel"><h3><span class="ttl">Resíduos por etapa da obra (m³)</span></h3><div class="cwrap"><canvas id="cEtapa"></canvas></div></div>
-    <div class="panel"><h3><span class="ttl">Por classe (CONAMA 307)</span></h3><div class="cwrap"><canvas id="cClasse"></canvas></div></div>
+  <div class="checkbar" id="statusBar">
+    <div class="top"><span class="lbl" style="margin:0">Status de custo (semáforo) — filtrar obras nos dois gráficos abaixo</span>
+      <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <label class="chk"><input type="checkbox" class="scChk" value="verde" checked> <span style="width:11px;height:11px;border-radius:2px;background:#2E9E5B;display:inline-block"></span> Verde (dentro)</label>
+        <label class="chk"><input type="checkbox" class="scChk" value="amarelo" checked> <span style="width:11px;height:11px;border-radius:2px;background:#E0A423;display:inline-block"></span> Amarelo (atenção)</label>
+        <label class="chk"><input type="checkbox" class="scChk" value="vermelho" checked> <span style="width:11px;height:11px;border-radius:2px;background:#C0463B;display:inline-block"></span> Vermelho (estourou)</label>
+      </span></div>
   </div>
 
   <div class="grid">
-    <div class="panel"><h3><span class="ttl">Volume por obra (m³) — etapas construtivas</span></h3><div class="cwrap"><canvas id="cObra"></canvas></div></div>
-    <div class="panel"><h3><span class="ttl">Volume de entulho por área construída (m³/m²)</span></h3><div class="cwrap"><canvas id="cM2"></canvas></div></div>
+    <div class="panel"><h3><span class="ttl">Volume de entulho por área construída (m³/m²)</span></h3><div class="cwrap"><canvas id="cM2"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> Realizado = volume construtivo da obra ÷ área construída (m²). Índice premissa = 0,20 (Alvenaria) ou 0,22 (Concreto armado). <b>Cores (semáforo de custo):</b> vermelho = realizado passou do orçado; amarelo = atingiu o limite da fase atual (Estrutura ≥60%, Estrutura e Acabamentos ≥70%, Acabamentos ≥90% do orçado); verde = dentro. Cinza = obra sem área/estrutura definida.</div></div>
+    <div class="panel"><h3><span class="ttl">Orçado vs Realizado — entulho por obra (m³)</span></h3><div class="cwrap"><canvas id="cOrc"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> Orçado = fator (0,20 alvenaria / 0,22 concreto) × área construída. Realizado = volume das etapas construtivas. A barra Realizado é pintada pelo semáforo (vermelho = estourou; amarelo = atenção pela fase atual; verde = dentro).</div></div>
   </div>
 
   <div class="grid">
-    <div class="panel"><h3><span class="ttl">Orçado vs Realizado — entulho por obra (m³)</span></h3><div class="cwrap"><canvas id="cOrc"></canvas></div></div>
+    <div class="panel"><h3><span class="ttl">Volume por obra (m³) — etapas construtivas</span></h3><div class="cwrap"><canvas id="cObra"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por obra, considerando só as etapas construtivas (exclui Terraplenagem, Limpeza do Terreno, Stand de Vendas - Construção e Demolição).</div></div>
     <div class="panel">
       <h3><span class="ttl">Evolução mensal (m³) — etapas construtivas</span>
         <span style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0"><span style="font-size:11px;color:var(--slate)">de</span><input type="month" id="evDe"><span style="font-size:11px;color:var(--slate)">até</span><input type="month" id="evAte"></span>
       </h3>
-      <div class="cwrap"><canvas id="cMes"></canvas></div>
+      <div class="cwrap"><canvas id="cMes"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por mês, só etapas construtivas, dentro do intervalo de mês (de/até) selecionado.</div>
     </div>
   </div>
 
   <div class="grid">
-    <div class="panel"><h3><span class="ttl">Por transportador (m³)</span></h3><div class="cwrap"><canvas id="cTransp"></canvas></div></div>
-    <div class="panel"><h3><span class="ttl">Percentual por tipo de resíduo — etapas construtivas</span></h3><div class="cwrap"><canvas id="cResiduo"></canvas></div></div>
+    <div class="panel"><h3><span class="ttl">Resíduos por etapa da obra (m³)</span></h3><div class="cwrap"><canvas id="cEtapa"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) das CTRs por etapa. A etapa de cada CTR vem do histórico de fases da obra (por data) e de regras por tipo de resíduo (solo/inertes → Terraplenagem; demolição → Limpeza do Terreno; stand → Stand de Vendas - Demolição).</div></div>
+    <div class="panel"><h3><span class="ttl">Por classe (CONAMA 307)</span></h3><div class="cwrap"><canvas id="cClasse"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por classe CONAMA 307 (A/B/C/D). O percentual é a classe dividida pelo volume total exibido.</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel"><h3><span class="ttl">Por transportador (m³)</span></h3><div class="cwrap"><canvas id="cTransp"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por transportador (todas as etapas).</div></div>
+    <div class="panel"><h3><span class="ttl">Percentual por tipo de resíduo — etapas construtivas</span></h3><div class="cwrap"><canvas id="cResiduo"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por grupo de tipo de resíduo, só etapas construtivas. O percentual é o grupo dividido pelo total exibido.</div></div>
   </div>
 
   <div class="panel" style="margin-top:16px">
@@ -128,7 +141,7 @@
     </h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Compara as obras selecionadas acima. Padrão: só etapas construtivas. Escolha uma etapa para analisar aquela fase entre as obras.</p>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap"><span class="lbl" style="margin:0">Métrica do gráfico</span><select id="cmpMetrica" class="selmini" style="min-width:200px"></select></div>
-    <div class="cwrap" style="height:260px;margin-bottom:16px"><canvas id="cCompara"></canvas></div>
+    <div class="cwrap" style="height:260px;margin-bottom:16px"><canvas id="cCompara"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> compara as obras marcadas. Volume = soma do volume das etapas construtivas (ou da etapa escolhida). m³/m² = volume ÷ área construída. Respeita os filtros ativos.</div>
     <div class="tbl-wrap"><table id="tblCmp"></table></div>
   </div>
 
@@ -164,6 +177,10 @@ const FLUXO=['Limpeza do Terreno','Stand de Vendas - Construção','Fundações'
 const NAO_CONSTRUTIVAS=new Set(['Terraplenagem','Limpeza do Terreno','Stand de Vendas - Construção','Stand de Vendas - Demolição']);
 const ESTRUTURAS=['','Alvenaria estrutural','Concreto armado'];
 const FATOR_ORC={'Alvenaria estrutural':0.2,'Concreto armado':0.22};
+const HOJE=new Date().toISOString().slice(0,10);
+const LIM_AMARELO={'Estrutura':0.6,'Estrutura e Acabamentos':0.7,'Acabamentos':0.9};
+const COR_STATUS={verde:'#2E9E5B',amarelo:'#E0A423',vermelho:'#C0463B',cinza:'#8A8F98'};
+let STATUS_SEL=new Set(['verde','amarelo','vermelho']);
 const strip=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const nf=(v,d=1)=>(+v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
 function grupoResiduo(res){
@@ -192,6 +209,7 @@ function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava|
 function faseNaData(obra,dataISO){const fs=(ATTRS[obra]&&ATTRS[obra].fases)||[];const ord=fs.filter(f=>f.etapa&&f.data).sort((a,b)=>a.data.localeCompare(b.data));let cur=null;for(const f of ord){if(f.data<=dataISO && (!f.dataFim||dataISO<=f.dataFim))cur=f.etapa;}return cur;}
 function recomputeEtapas(){RAW.forEach(r=>{const esp=etapaEspecial(r.residuo);r.etapa=esp||faseNaData(r.obra,r.data)||r.etapaOrig||'Não informada';});}
 recomputeEtapas();
+function statusCusto(o,real){const a=ATTRS[o]||{};const area=+a.area||0;const fat=FATOR_ORC[a.estrutura];if(!area||!fat)return 'cinza';const orc=fat*area;if(real>orc)return 'vermelho';const lim=LIM_AMARELO[faseNaData(o,HOJE)];if(lim!=null&&real>=lim*orc)return 'amarelo';return 'verde';}
 
 const uniq=a=>[...new Set(a)].sort();
 const charts={};
@@ -303,21 +321,21 @@ function render(){
   // Volume de entulho por área construída (m³/m²) com índice-premissa
   const obrasSel=[...OBRAS_SEL];
   const volObra=soma(dc,'obra');
-  const m2labels=[],m2real=[],m2idx=[];
-  obrasSel.forEach(o=>{const a=+(ATTRS[o]&&ATTRS[o].area)||0;const est=(ATTRS[o]&&ATTRS[o].estrutura)||'';if(a>0){m2labels.push(o);m2real.push(+((volObra[o]||0)/a).toFixed(3));m2idx.push(FATOR_ORC[est]?+FATOR_ORC[est]:null);}});
+  const m2labels=[],m2real=[],m2idx=[],m2cor=[];
+  obrasSel.forEach(o=>{const a=+(ATTRS[o]&&ATTRS[o].area)||0;const est=(ATTRS[o]&&ATTRS[o].estrutura)||'';if(a>0){const st=statusCusto(o,volObra[o]||0);if(st!=='cinza'&&!STATUS_SEL.has(st))return;m2labels.push(o);m2real.push(+((volObra[o]||0)/a).toFixed(3));m2idx.push(FATOR_ORC[est]?+FATOR_ORC[est]:null);m2cor.push(COR_STATUS[st]);}});
   if(charts['cM2'])charts['cM2'].destroy();
   charts['cM2']=new Chart(document.getElementById('cM2'),{type:'bar',data:{labels:m2labels.length?m2labels:['—'],datasets:[
-    {label:'Realizado (m³/m²)',data:m2labels.length?m2real:[0],backgroundColor:'#2C4E7A',borderRadius:4},
+    {label:'Realizado (m³/m²)',data:m2labels.length?m2real:[0],backgroundColor:m2labels.length?m2cor:['#8A8F98'],borderRadius:4},
     {label:'Índice premissa (m³/m²)',data:m2labels.length?m2idx:[0],backgroundColor:'#8A8F98',borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${nf(ctx.raw,3)} m³/m²`}}},scales:{y:{beginAtZero:true},x:{ticks:{font:{size:10}}}}}});
 
   // Orçado vs Realizado (entulho construtivo)
-  const oL=[],orc=[],real=[];
-  obrasSel.forEach(o=>{const a=+(ATTRS[o]&&ATTRS[o].area)||0;const est=(ATTRS[o]&&ATTRS[o].estrutura)||'';const fat=FATOR_ORC[est];if(a>0&&fat){oL.push(o);orc.push(+(fat*a).toFixed(1));real.push(+((volObra[o]||0)).toFixed(1));}});
+  const oL=[],orc=[],real=[],oCor=[];
+  obrasSel.forEach(o=>{const a=+(ATTRS[o]&&ATTRS[o].area)||0;const est=(ATTRS[o]&&ATTRS[o].estrutura)||'';const fat=FATOR_ORC[est];if(a>0&&fat){const st=statusCusto(o,volObra[o]||0);if(!STATUS_SEL.has(st))return;oL.push(o);orc.push(+(fat*a).toFixed(1));real.push(+((volObra[o]||0)).toFixed(1));oCor.push(COR_STATUS[st]);}});
   if(charts['cOrc'])charts['cOrc'].destroy();
   charts['cOrc']=new Chart(document.getElementById('cOrc'),{type:'bar',data:{labels:oL.length?oL:['—'],datasets:[
     {label:'Orçado (premissa)',data:oL.length?orc:[0],backgroundColor:'#8A8F98',borderRadius:4},
-    {label:'Realizado',data:oL.length?real:[0],backgroundColor:'#F07E22',borderRadius:4}]},
+    {label:'Realizado',data:oL.length?real:[0],backgroundColor:oL.length?oCor:['#F07E22'],borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${nf(ctx.raw)} m³`}}},scales:{y:{beginAtZero:true},x:{ticks:{font:{size:10}}}}}});
 
   document.getElementById('foot').innerHTML='Etapas seguem o histórico de fases de cada obra (Master): ao mudar de fase, a anterior congela e a nova começa do zero. Gráficos de volume por obra, evolução, tipo de resíduo, m³/m² e orçado×realizado desconsideram Terraplenagem, Limpeza do Terreno, Stand de Vendas (Construção e Demolição). Premissa de orçamento: Alvenaria estrutural 0,2 m³/m²; Concreto armado 0,22 m³/m². Percentuais mostrados nos tooltips e legendas.';
@@ -329,6 +347,7 @@ document.getElementById('rToggle').onclick=()=>{const el=document.getElementById
 (function(){const ms=RAW.map(r=>(r.data||'').slice(0,7)).filter(Boolean).sort();if(ms.length){document.getElementById('evDe').value=ms[0];document.getElementById('evAte').value=ms[ms.length-1];}})();
 
 renderObraChecks(); renderRChecks(); render();
+document.querySelectorAll('.scChk').forEach(ch=>ch.addEventListener('change',()=>{if(ch.checked)STATUS_SEL.add(ch.value);else STATUS_SEL.delete(ch.value);render();}));
 
 /* ===== Comparar obras ===== */
 const CMP_METRICAS=[['vol','Volume de Entulho (m³)'],['m2','Volume de entulho por área construída (m³ / m²)'],['ctrs','Nº de CTRs']];
@@ -403,6 +422,7 @@ function renderObras(){const w=document.getElementById('obrasWrap');if(!NOVAS.le
 function baixarCsv(){const esc=v=>/[",;\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;const linhas=[['Obra','Login (CNPJ)','Senha','Etapa','Ativo']].concat(NOVAS.map(o=>[o.obra,o.cnpj,o.senha,'',o.ativo]));const csv='﻿'+linhas.map(l=>l.map(esc).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='novas_obras.csv';a.click();URL.revokeObjectURL(a.href);}
 document.getElementById('btAdd').onclick=()=>{const obra=document.getElementById('oNome').value.trim();const cnpj=document.getElementById('oCnpj').value.replace(/\D/g,'');const senha=document.getElementById('oSenhaN').value.trim();const ativo=document.getElementById('oAtivo').value;if(!obra||!cnpj||!senha){alert('Preencha Obra, CNPJ e Senha.');return;}NOVAS.push({obra,cnpj,senha,ativo});salvarNovas();renderObras();document.getElementById('oNome').value='';document.getElementById('oCnpj').value='';document.getElementById('oSenhaN').value='conx2016';};
 renderObras();
+document.querySelectorAll('.panel h3 .ttl').forEach(t=>{t.addEventListener('click',()=>{const cb=t.closest('.panel').querySelector('.calcbase');if(cb)cb.style.display=cb.style.display==='block'?'none':'block';});});
 </script>
 </body>
 </html>
