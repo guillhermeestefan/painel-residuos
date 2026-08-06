@@ -43,6 +43,7 @@
   table{width:100%;border-collapse:collapse;font-size:12.5px}
   th{background:#FAFBFC;text-align:left;padding:9px 10px;color:var(--slate);font-weight:600;font-size:11px;letter-spacing:.3px;text-transform:uppercase;border-bottom:2px solid var(--line)}
   td{padding:8px 10px;border-bottom:1px solid var(--line)}
+  #tblCmp th,#tblCmp td{text-align:center}
   .tbl-wrap{overflow:auto}
   .inp{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:#fff;color:var(--ink)}
   .btn{padding:9px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
@@ -347,7 +348,7 @@ function renderCmpTabela(){
   const t=document.getElementById('tblCmp');const obras=selCmp();
   if(!obras.length){t.innerHTML='<tbody><tr><td style="color:var(--slate);padding:8px">Marque obras acima.</td></tr></tbody>';return;}
   const et=document.getElementById('cmpEtapa').value;
-  const rows=obras.map(o=>{const m=metricasObra(o);return `<tr><td style="font-weight:500">${o}</td><td>${et==='__all'?'construtivas':et}</td><td style="text-align:right">${m.area||'—'}</td><td>${m.estrutura||'—'}</td><td style="text-align:right">${nf(m.vol,0)}</td><td style="text-align:right">${m.ctrs}</td><td style="text-align:right">${m.area?nf(m.m2,3):'—'}</td></tr>`;}).join('');
+  const rows=obras.map(o=>{const m=metricasObra(o);return `<tr><td style="font-weight:500">${o}</td><td>${et==='__all'?'construtivas':et}</td><td>${m.area||'—'}</td><td>${m.estrutura||'—'}</td><td>${nf(m.vol,0)}</td><td>${m.ctrs}</td><td>${m.area?nf(m.m2,3):'—'}</td></tr>`;}).join('');
   t.innerHTML=`<thead><tr><th>Obra</th><th>Etapa</th><th>Área constr. m²</th><th>Estrutura</th><th>Vol m³</th><th>CTRs</th><th>m³/m²</th></tr></thead><tbody>${rows}</tbody>`;
 }
 function renderCmpChart(){
