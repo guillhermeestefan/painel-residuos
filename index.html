@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Gestão de Resíduos — CTR's SP Regula</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js" onerror="/* Firebase ainda não configurado */"></script>
 <script src="dados_ctr.js" onerror="/* sem dados ainda */"></script>
 <script src="caracteristicas.js" onerror="/* sem características ainda */"></script>
 <style>
@@ -203,7 +207,8 @@ if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:
 
 let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
-function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){}}
+let MASTER_ON=false;
+function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){} if(window._db&&window._auth&&window._auth.currentUser){window._db.collection('painel').doc('caracteristicas').set({dados:ATTRS,atualizado:Date.now()}).catch(e=>console.warn('firestore save',e));}}
 
 function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava|inerte/.test(r))return 'Terraplenagem'; if(/stand/.test(r))return 'Stand de Vendas - Demolição'; if(/demoli/.test(r))return 'Limpeza do Terreno'; return null;}
 function faseNaData(obra,dataISO){const fs=(ATTRS[obra]&&ATTRS[obra].fases)||[];const ord=fs.filter(f=>f.etapa&&f.data).sort((a,b)=>a.data.localeCompare(b.data));let cur=null;for(const f of ord){if(f.data<=dataISO && (!f.dataFim||dataISO<=f.dataFim))cur=f.etapa;}return cur;}
@@ -380,9 +385,31 @@ function renderCmp(){renderCmpTabela();renderCmpChart();}
 renderCmpChecksInfo(); renderCmp();
 
 /* ===== Master ===== */
-function setMaster(on){document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on)renderCarac();}
-document.getElementById('masterBtn').onclick=()=>{if(sessionStorage.getItem('master')==='1'){sessionStorage.removeItem('master');setMaster(false);return;}const p=prompt('Senha do perfil Master:');if(p===null)return;if(p===MASTER_PW){sessionStorage.setItem('master','1');setMaster(true);}else alert('Senha incorreta.');};
-setMaster(sessionStorage.getItem('master')==='1');
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on)renderCarac();}
+document.getElementById('masterBtn').onclick=async ()=>{
+  if(window._auth){
+    if(window._auth.currentUser){ await window._auth.signOut(); return; }
+    const email=prompt('E-mail do Master (Firebase):'); if(!email)return;
+    const pw=prompt('Senha do Master:'); if(pw===null)return;
+    try{ await window._auth.signInWithEmailAndPassword(email,pw); }catch(e){ alert('Login falhou: '+e.message); }
+    return;
+  }
+  if(sessionStorage.getItem('master')==='1'){sessionStorage.removeItem('master');setMaster(false);return;}
+  const p=prompt('Senha do perfil Master:');if(p===null)return;if(p===MASTER_PW){sessionStorage.setItem('master','1');setMaster(true);}else alert('Senha incorreta.');
+};
+
+// ===== Firebase (banco compartilhado) =====
+(function(){
+  if(!(window.FIREBASE_CONFIG&&window.firebase)){ setMaster(sessionStorage.getItem('master')==='1'); return; }
+  try{
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    window._db=firebase.firestore(); window._auth=firebase.auth();
+    window._db.collection('painel').doc('caracteristicas').onSnapshot(snap=>{
+      if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); if(MASTER_ON)renderCarac(); }
+    },err=>console.warn('firestore read',err));
+    window._auth.onAuthStateChanged(u=>setMaster(!!u));
+  }catch(e){ console.warn('firebase init',e); setMaster(false); }
+})();
 
 /* ===== Características (Master) ===== */
 function renderCarac(){
