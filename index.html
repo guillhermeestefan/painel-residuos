@@ -150,8 +150,8 @@
   </div>
 
   <div class="panel masteronly" style="margin-top:16px" id="secCarac">
-    <h3><span class="ttl">Características das obras (Master)</span><button id="btBaixarCarac" class="btn sm">Baixar caracteristicas.js</button></h3>
-    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Defina área construída, estrutura e o <b>histórico de fases</b> (etapa + data que entrou). Ao mudar de fase, a anterior fica congelada e a nova começa do zero. Depois clique em <b>Baixar caracteristicas.js</b> e suba no repositório para valer no link.</p>
+    <h3><span class="ttl">Características das obras (Master)</span><span style="display:flex;gap:8px"><button id="btSalvarNuvem" class="btn sm">Salvar na nuvem</button><button id="btBaixarCarac" class="btn sm" style="background:#8A8F98">Baixar backup</button></span></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Defina área construída, estrutura e o <b>histórico de fases</b> (etapa + data que entrou). As mudanças são salvas na nuvem e <b>todos que abrirem o link veem igual</b>. Se preencheu antes de entrar como Master, clique em <b>Salvar na nuvem</b> uma vez para publicar tudo.</p>
     <div id="caracWrap"></div>
   </div>
 
@@ -438,6 +438,13 @@ function renderCarac(){
   });
 }
 document.getElementById('btBaixarCarac').onclick=()=>{const js='window.CARACTERISTICAS = '+JSON.stringify(ATTRS,null,1)+';\n';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([js],{type:'text/javascript'}));a.download='caracteristicas.js';a.click();URL.revokeObjectURL(a.href);};
+document.getElementById('btSalvarNuvem').onclick=()=>{
+  if(!(window._db&&window._auth&&window._auth.currentUser)){ alert('Entre como Master (login) antes de salvar na nuvem.'); return; }
+  document.getElementById('btSalvarNuvem').textContent='Salvando...';
+  window._db.collection('painel').doc('caracteristicas').set({dados:ATTRS,atualizado:Date.now()})
+    .then(()=>{ alert('Salvo na nuvem! Agora todos que abrirem o link (em qualquer computador) veem os mesmos dados.'); document.getElementById('btSalvarNuvem').textContent='Salvar na nuvem'; })
+    .catch(e=>{ alert('Erro ao salvar: '+e.message); document.getElementById('btSalvarNuvem').textContent='Salvar na nuvem'; });
+};
 
 /* ===== Adicionar obra ===== */
 let NOVAS=[];try{NOVAS=JSON.parse(localStorage.getItem('novas_obras')||'[]');}catch(e){NOVAS=[];}
