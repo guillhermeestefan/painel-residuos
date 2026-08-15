@@ -146,6 +146,17 @@
     <div class="calcbase"><b>Base de cálculo:</b> para cada programa, número de obras onde ele está marcado como "ativo" no Controle de Programas (Master). % = sobre o total de obras do painel.</div>
   </div>
 
+  <div class="grid" style="margin-top:16px">
+    <div class="panel"><h3><span class="ttl">Não-conformidade por obra</span></h3><div class="cwrap"><canvas id="cConfObra"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> por obra, quantos programas estão <b>não-conformes</b> (deveriam estar em uso na etapa atual da obra, mas não estão) vs. conformes. Programa fora da janela da etapa não entra na conta.</div></div>
+    <div class="panel"><h3><span class="ttl">Não-conformidade por programa</span></h3><div class="cwrap"><canvas id="cConfProg"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> por programa, em quantas obras ele está não-conforme (obra na etapa de uso e programa não está em uso).</div></div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h3><span class="ttl">Matriz de conformidade — obra × programa</span></h3>
+    <div id="confMatriz" style="overflow:auto"></div>
+    <div class="calcbase" style="margin-top:10px" id="confLegenda"></div>
+  </div>
+
   <div class="panel" style="margin-top:16px">
     <h3><span class="ttl">Comparar obras</span>
       <span style="display:flex;align-items:center;gap:8px;font-weight:400;text-transform:none;letter-spacing:0"><span class="lbl" style="margin:0">Etapa</span><select id="cmpEtapa" class="selmini"></select></span>
@@ -357,6 +368,7 @@ function render(){
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${nf(ctx.raw)} m³`}}},scales:{y:{beginAtZero:true},x:{ticks:{font:{size:10}}}}}});
 
   document.getElementById('foot').innerHTML='Etapas seguem o histórico de fases de cada obra (Master): ao mudar de fase, a anterior congela e a nova começa do zero. Gráficos de volume por obra, evolução, tipo de resíduo, m³/m² e orçado×realizado desconsideram Terraplenagem, Limpeza do Terreno, Stand de Vendas (Construção e Demolição). Premissa de orçamento: Alvenaria estrutural 0,2 m³/m²; Concreto armado 0,22 m³/m². Percentuais mostrados nos tooltips e legendas.';
+  if(window.__confReady)renderConf();
 }
 ['fEtapa','fPeriodo','fTransp','evDe','evAte','pDe','pAte'].forEach(id=>document.getElementById(id).addEventListener('change',render));
 document.getElementById('rToggle').onclick=()=>{const el=document.getElementById('rChecks');const vis=el.style.display!=='none';el.style.display=vis?'none':'flex';document.getElementById('rToggle').textContent='Tipos de resíduo '+(vis?'▾':'▴');};
@@ -401,6 +413,53 @@ renderCmpChecksInfo(); renderCmp();
 const PROG_LISTA=(window.PROGRAMAS_LISTA&&window.PROGRAMAS_LISTA.length)?window.PROGRAMAS_LISTA:['Caçambas Padrão (4m³)','Caçambas de Gesso (5m³)','Big Bags','Logística Reversa de Bloco','Ensacados','Painel Eletrônico Tapume','Baldes','Pró-Lata','Madeira - Rafa Entulhos','Sucata - Rafa Entulhos','Agregado Reciclado (Classe A)'];
 let PROG={}; try{ PROG=JSON.parse(JSON.stringify((window.PROGRAMAS_INIT&&typeof window.PROGRAMAS_INIT==='object')?window.PROGRAMAS_INIT:{})); }catch(e){ PROG={}; }
 function progCell(o,p){ return (PROG[o]&&PROG[o][p])||{status:'',ativo:false}; }
+/* ===== Conformidade programa x etapa (mapa da planilha Obras Conx 2026) ===== */
+const PROGRAMA_ETAPAS={
+ 'Caçambas Padrão (4m³)':'todas',
+ 'Caçambas de Gesso (5m³)':['Estrutura e Acabamentos','Acabamentos'],
+ 'Big Bags':'todas',
+ 'Logística Reversa de Bloco':['Estrutura','Estrutura e Acabamentos'],
+ 'Ensacados':['Estrutura','Estrutura e Acabamentos','Acabamentos'],
+ 'Painel Eletrônico Tapume':'todas',
+ 'Baldes':['Estrutura e Acabamentos','Acabamentos'],
+ 'Pró-Lata':['Estrutura e Acabamentos','Acabamentos'],
+ 'Madeira - Rafa Entulhos':['Estrutura','Estrutura e Acabamentos'],
+ 'Sucata - Rafa Entulhos':['Fundações','Estrutura','Estrutura e Acabamentos'],
+ 'Agregado Reciclado (Classe A)':['Fundações','Estrutura']
+};
+const ETAPAS_CONSTR=['Limpeza do Terreno','Fundações','Estrutura','Estrutura e Acabamentos','Acabamentos'];
+function progEtapaAtual(o){ return (typeof faseNaData==='function')?faseNaData(o,HOJE):null; }
+function progAplicavel(p,et){ if(!et) return false; const r=PROGRAMA_ETAPAS[p]; if(!r) return false; if(r==='todas') return ETAPAS_CONSTR.indexOf(et)>=0; return r.indexOf(et)>=0; }
+function progEmUso(c){ if(!c||!c.ativo) return false; const s=String(c.status||'').trim().toLowerCase(); return !(s===''||s==='-'||s==='não'||s==='nao'); }
+function progConf(o,p){ const et=progEtapaAtual(o); if(!et) return 'sem_etapa'; if(!progAplicavel(p,et)) return 'na'; return progEmUso(progCell(o,p))?'conforme':'nao'; }
+function renderConf(){
+  if(!document.getElementById('cConfObra')) return;
+  const obras=OBRAS;
+  const nObra=obras.map(()=>0), cObraArr=obras.map(()=>0), naoProg={};
+  PROG_LISTA.forEach(p=>naoProg[p]=0);
+  const M={};
+  obras.forEach((o,i)=>{ M[o]={}; PROG_LISTA.forEach(p=>{ const c=progConf(o,p); M[o][p]=c; if(c==='nao'){nObra[i]++;naoProg[p]++;} else if(c==='conforme'){cObraArr[i]++;} }); });
+  if(charts['cConfObra'])charts['cConfObra'].destroy();
+  charts['cConfObra']=new Chart(document.getElementById('cConfObra'),{type:'bar',data:{labels:obras,datasets:[
+    {label:'Não-conforme',data:nObra,backgroundColor:'#C0463B',borderRadius:4,stack:'s'},
+    {label:'Conforme',data:cObraArr,backgroundColor:'#2E9E5B',borderRadius:4,stack:'s'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}},scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,beginAtZero:true,ticks:{stepSize:1,precision:0}}}}});
+  const pd=PROG_LISTA.map(p=>naoProg[p]);
+  if(charts['cConfProg'])charts['cConfProg'].destroy();
+  charts['cConfProg']=new Chart(document.getElementById('cConfProg'),{type:'bar',data:{labels:PROG_LISTA,datasets:[{data:pd,backgroundColor:'#C0463B',borderRadius:4}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.raw} obra(s) não-conforme(s)`}}},scales:{x:{beginAtZero:true,ticks:{stepSize:1,precision:0}},y:{ticks:{font:{size:10}}}}}});
+  const COR={conforme:'#E6F4EA',nao:'#F7D9D5',na:'#F2F3F5',sem_etapa:'#FFF6E6'};
+  const TXT={conforme:'✓',nao:'✗',na:'–',sem_etapa:'?'};
+  const TIT={conforme:'Conforme',nao:'Não-conforme — cobrar',na:'Fora da janela da etapa',sem_etapa:'Obra sem etapa definida'};
+  let html='<table style="min-width:1000px;border-collapse:collapse;font-size:11px"><thead><tr><th style="position:sticky;left:0;background:#FAFBFC;padding:6px;text-align:left">Obra <span style="color:var(--slate);font-weight:400">(etapa)</span></th>'+PROG_LISTA.map(p=>`<th style="padding:6px 4px;text-align:center;font-size:10px;max-width:90px">${p}</th>`).join('')+'</tr></thead><tbody>';
+  obras.forEach(o=>{ const et=progEtapaAtual(o)||'sem etapa'; html+=`<tr><td style="position:sticky;left:0;background:#fff;padding:6px;white-space:nowrap;font-weight:500">${o} <span style="color:var(--slate);font-weight:400">(${et})</span></td>`;
+    PROG_LISTA.forEach(p=>{ const c=M[o][p]; html+=`<td title="${TIT[c]}" style="text-align:center;background:${COR[c]};border:2px solid #fff;font-weight:700;color:#333">${TXT[c]}</td>`; });
+    html+='</tr>'; });
+  html+='</tbody></table>';
+  document.getElementById('confMatriz').innerHTML=html;
+  const mapaTxt=PROG_LISTA.map(p=>{ const r=PROGRAMA_ETAPAS[p]; return `<b>${p}:</b> ${r==='todas'?'todas as etapas':(r?r.join(', '):'—')}`; }).join(' &nbsp;·&nbsp; ');
+  document.getElementById('confLegenda').innerHTML='<b>Legenda:</b> <span style="background:#E6F4EA;padding:1px 6px;border-radius:3px">✓ conforme</span> <span style="background:#F7D9D5;padding:1px 6px;border-radius:3px">✗ não-conforme</span> <span style="background:#F2F3F5;padding:1px 6px;border-radius:3px">– fora da janela</span> <span style="background:#FFF6E6;padding:1px 6px;border-radius:3px">? sem etapa</span>. Cada programa só é cobrado na(s) etapa(s) do mapa abaixo. <b>Em uso</b> = marcado <i>ativo</i> + status preenchido (não vazio, não "-", não "Não").<br><br><b>Mapa programa × etapa (planilha):</b> '+mapaTxt;
+}
 function saveProg(){ if(window._db&&window._auth&&window._auth.currentUser){ window._db.collection('painel').doc('programas').set({dados:PROG,atualizado:Date.now()}).catch(e=>console.warn('save prog',e)); } }
 function renderProgChart(){
   if(!document.getElementById('cProg')) return;
@@ -419,11 +478,11 @@ function renderProgMatrix(){
   html+='</tbody></table></div>';
   w.innerHTML=html;
   w.querySelectorAll('td[data-o]').forEach(td=>{ const o=td.dataset.o,p=td.dataset.p;
-    const upd=()=>{ PROG[o]=PROG[o]||{}; PROG[o][p]={ativo:td.querySelector('.pgAtivo').checked,status:td.querySelector('.pgStatus').value}; saveProg(); renderProgChart(); };
+    const upd=()=>{ PROG[o]=PROG[o]||{}; PROG[o][p]={ativo:td.querySelector('.pgAtivo').checked,status:td.querySelector('.pgStatus').value}; saveProg(); renderProgChart(); renderConf(); };
     td.querySelectorAll('.pgAtivo,.pgStatus').forEach(el=>el.addEventListener('change',upd)); });
 }
 document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&window._auth&&window._auth.currentUser)){alert('Entre como Master antes de salvar.');return;} window._db.collection('painel').doc('programas').set({dados:PROG,atualizado:Date.now()}).then(()=>alert('Programas salvos na nuvem! Todos veem igual.')).catch(e=>alert('Erro: '+e.message)); };
-renderProgChart();
+renderProgChart(); window.__confReady=true; renderConf();
 
 /* ===== Master ===== */
 function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){renderCarac();renderProgMatrix();}}
@@ -449,7 +508,7 @@ document.getElementById('masterBtn').onclick=async ()=>{
       if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); if(MASTER_ON)renderCarac(); }
     },err=>console.warn('firestore read',err));
     window._db.collection('painel').doc('programas').onSnapshot(snap=>{
-      if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); if(MASTER_ON)renderProgMatrix(); }
+      if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); renderConf(); if(MASTER_ON)renderProgMatrix(); }
     },err=>console.warn('firestore prog',err));
     window._auth.onAuthStateChanged(u=>setMaster(!!u));
   }catch(e){ console.warn('firebase init',e); setMaster(false); }
