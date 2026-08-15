@@ -11,6 +11,7 @@
 <script src="firebase-config.js" onerror="/* Firebase ainda não configurado */"></script>
 <script src="dados_ctr.js" onerror="/* sem dados ainda */"></script>
 <script src="caracteristicas.js" onerror="/* sem características ainda */"></script>
+<script src="programas-init.js" onerror="/* sem programas ainda */"></script>
 <style>
   :root{--orange:#F07E22;--ink:#242A30;--slate:#6A7B8C;--line:#E6EAEE;--bg:#F5F6F8;--card:#FFFFFF;--cream:#FFF4EA;--cream-bd:#F6CFA6;--green:#2E9E5B;--amber:#E0A423;--red:#C0463B;--violet:#7B61B5;--navy2:#2C4E7A;--blue:#3E7CB1;}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -140,6 +141,12 @@
   </div>
 
   <div class="panel" style="margin-top:16px">
+    <h3><span class="ttl">Adesão aos programas — obras com o programa ativo</span></h3>
+    <div class="cwrap" style="height:340px"><canvas id="cProg"></canvas></div>
+    <div class="calcbase"><b>Base de cálculo:</b> para cada programa, número de obras onde ele está marcado como "ativo" no Controle de Programas (Master). % = sobre o total de obras do painel.</div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
     <h3><span class="ttl">Comparar obras</span>
       <span style="display:flex;align-items:center;gap:8px;font-weight:400;text-transform:none;letter-spacing:0"><span class="lbl" style="margin:0">Etapa</span><select id="cmpEtapa" class="selmini"></select></span>
     </h3>
@@ -153,6 +160,12 @@
     <h3><span class="ttl">Características das obras (Master)</span><span style="display:flex;gap:8px"><button id="btSalvarNuvem" class="btn sm">Salvar na nuvem</button><button id="btBaixarCarac" class="btn sm" style="background:#8A8F98">Baixar backup</button></span></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Defina área construída, estrutura e o <b>histórico de fases</b> (etapa + data que entrou). As mudanças são salvas na nuvem e <b>todos que abrirem o link veem igual</b>. Se preencheu antes de entrar como Master, clique em <b>Salvar na nuvem</b> uma vez para publicar tudo.</p>
     <div id="caracWrap"></div>
+  </div>
+
+  <div class="panel masteronly" style="margin-top:16px" id="secProg">
+    <h3><span class="ttl">Controle de Programas (Master)</span><button id="btSalvarProg" class="btn sm">Salvar na nuvem</button></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Para cada obra e programa: marque se está <b>ativo</b> e escreva o status. Salvo na nuvem e visível para todos. Já preenchido a partir da sua planilha — ajuste o que precisar.</p>
+    <div id="progWrap"></div>
   </div>
 
   <div class="panel masteronly" style="margin-top:16px" id="secAddObra">
@@ -384,8 +397,36 @@ function renderCmpChart(){
 function renderCmp(){renderCmpTabela();renderCmpChart();}
 renderCmpChecksInfo(); renderCmp();
 
+/* ===== Controle de Programas ===== */
+const PROG_LISTA=(window.PROGRAMAS_LISTA&&window.PROGRAMAS_LISTA.length)?window.PROGRAMAS_LISTA:['Caçambas Padrão (4m³)','Caçambas de Gesso (5m³)','Big Bags','Logística Reversa de Bloco','Ensacados','Painel Eletrônico Tapume','Baldes','Pró-Lata','Madeira - Rafa Entulhos','Sucata - Rafa Entulhos','Agregado Reciclado (Classe A)'];
+let PROG={}; try{ PROG=JSON.parse(JSON.stringify((window.PROGRAMAS_INIT&&typeof window.PROGRAMAS_INIT==='object')?window.PROGRAMAS_INIT:{})); }catch(e){ PROG={}; }
+function progCell(o,p){ return (PROG[o]&&PROG[o][p])||{status:'',ativo:false}; }
+function saveProg(){ if(window._db&&window._auth&&window._auth.currentUser){ window._db.collection('painel').doc('programas').set({dados:PROG,atualizado:Date.now()}).catch(e=>console.warn('save prog',e)); } }
+function renderProgChart(){
+  if(!document.getElementById('cProg')) return;
+  const tot=OBRAS.length||1;
+  const counts=PROG_LISTA.map(p=>OBRAS.filter(o=>progCell(o,p).ativo).length);
+  if(charts['cProg'])charts['cProg'].destroy();
+  charts['cProg']=new Chart(document.getElementById('cProg'),{type:'bar',data:{labels:PROG_LISTA,datasets:[{data:counts,backgroundColor:'#2E9E5B',borderRadius:5}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.raw} de ${tot} obras (${Math.round(ctx.raw/tot*100)}%)`}}},scales:{x:{beginAtZero:true,max:tot,ticks:{stepSize:1,precision:0}},y:{ticks:{font:{size:10}}}}}});
+}
+function renderProgMatrix(){
+  const w=document.getElementById('progWrap'); if(!w) return;
+  if(!OBRAS.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem obras.</p>'; return; }
+  let html='<div style="overflow:auto"><table style="min-width:1000px"><thead><tr><th style="position:sticky;left:0;background:#FAFBFC">Obra</th>'+PROG_LISTA.map(p=>`<th style="text-align:center">${p}</th>`).join('')+'</tr></thead><tbody>';
+  OBRAS.forEach(o=>{ html+='<tr><td style="font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff">'+o+'</td>';
+    PROG_LISTA.forEach(p=>{ const c=progCell(o,p); html+=`<td data-o="${o}" data-p="${p}" style="min-width:150px;vertical-align:top"><label class="chk" style="margin-bottom:4px"><input type="checkbox" class="pgAtivo" ${c.ativo?'checked':''}> ativo</label><input class="inp pgStatus" style="width:100%" placeholder="status" value="${String(c.status||'').replace(/"/g,'&quot;')}"></td>`; });
+    html+='</tr>'; });
+  html+='</tbody></table></div>';
+  w.innerHTML=html;
+  w.querySelectorAll('td[data-o]').forEach(td=>{ const o=td.dataset.o,p=td.dataset.p;
+    const upd=()=>{ PROG[o]=PROG[o]||{}; PROG[o][p]={ativo:td.querySelector('.pgAtivo').checked,status:td.querySelector('.pgStatus').value}; saveProg(); renderProgChart(); };
+    td.querySelectorAll('.pgAtivo,.pgStatus').forEach(el=>el.addEventListener('change',upd)); });
+}
+document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&window._auth&&window._auth.currentUser)){alert('Entre como Master antes de salvar.');return;} window._db.collection('painel').doc('programas').set({dados:PROG,atualizado:Date.now()}).then(()=>alert('Programas salvos na nuvem! Todos veem igual.')).catch(e=>alert('Erro: '+e.message)); };
+renderProgChart();
+
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on)renderCarac();}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){renderCarac();renderProgMatrix();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -407,6 +448,9 @@ document.getElementById('masterBtn').onclick=async ()=>{
     window._db.collection('painel').doc('caracteristicas').onSnapshot(snap=>{
       if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); if(MASTER_ON)renderCarac(); }
     },err=>console.warn('firestore read',err));
+    window._db.collection('painel').doc('programas').onSnapshot(snap=>{
+      if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); if(MASTER_ON)renderProgMatrix(); }
+    },err=>console.warn('firestore prog',err));
     window._auth.onAuthStateChanged(u=>setMaster(!!u));
   }catch(e){ console.warn('firebase init',e); setMaster(false); }
 })();
