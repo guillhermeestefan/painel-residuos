@@ -159,18 +159,108 @@ def extrair_obra(page, obra, desde, ate, downloads_dir):
     download.save_as(str(dest))
     return dest
 
+def _rows_from_df(df):
+    return [tuple(df.columns)] + [tuple(r) for r in df.itertuples(index=False, name=None)]
+
+def _ler_html(raw):
+    import io, pandas as pd
+    try:
+        txt = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        txt = raw.decode("latin-1")
+    dfs = pd.read_html(io.StringIO(txt), thousands='.', decimal=',')
+    if not dfs:
+        raise ValueError("nenhuma tabela HTML encontrada")
+    df = max(dfs, key=lambda d: d.shape[0])
+    return _rows_from_df(df)
+
+def _ler_spreadsheetml(raw):
+    # Excel 2003 XML (SpreadsheetML) - export comum do SP Regula
+    from xml.etree import ElementTree as ET
+    txt = raw.decode("utf-8", "ignore")
+    root = ET.fromstring(txt)
+    SS = "{urn:schemas-microsoft-com:office:spreadsheet}"
+    rows = []
+    for row in root.iter(SS + "Row"):
+        cells, col = [], 0
+        for cell in row.findall(SS + "Cell"):
+            idx = cell.get(SS + "Index")
+            if idx:
+                col = int(idx) - 1
+                while len(cells) < col:
+                    cells.append(None)
+            data = cell.find(SS + "Data")
+            cells.append(data.text if data is not None else None)
+            col += 1
+        rows.append(tuple(cells))
+    if not rows:
+        raise ValueError("SpreadsheetML sem linhas")
+    return rows
+
+def _ler_xlsx(raw):
+    import io
+    wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True, read_only=True)
+    return list(wb.active.iter_rows(values_only=True))
+
+def _ler_xls_bin(raw):
+    import io, pandas as pd
+    df = pd.read_excel(io.BytesIO(raw), engine="xlrd")
+    return _rows_from_df(df)
+
+def _ler_csv_txt(raw):
+    import csv as _csv, io as _io
+    try:
+        txt = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        txt = raw.decode("latin-1")
+    amostra = txt[:5000]
+    sep = max((";", ","), key=lambda s: amostra.count(s))
+    if amostra.count("\t") > amostra.count(sep):
+        sep = "\t"
+    rows = [tuple(r) for r in _csv.reader(_io.StringIO(txt), delimiter=sep)]
+    if len(rows) < 2:
+        raise ValueError("CSV com menos de 2 linhas")
+    return rows
+
 def carregar_tabela(path):
+    """Le o export do SP Regula em qualquer formato entregue: HTML disfarcado
+    de .xls, Excel 2003 XML (SpreadsheetML), .xlsx real, .xls binario antigo
+    (BIFF) ou CSV. Detecta por conteudo e, se falhar, faz cascata de parsers."""
     path = Path(path)
-    head = open(path,"rb").read(4000)
-    if (b"<table" in head.lower()) or (b"<html" in head.lower()) or path.suffix.lower() in (".html",".htm"):
-        import pandas as pd
-        df = max(pd.read_html(path), key=lambda d: d.shape[0])
-        return [tuple(df.columns)] + [tuple(r) for r in df.itertuples(index=False, name=None)]
-    if path.suffix.lower() == ".xls":
-        import pandas as pd
-        df = pd.read_excel(path)
-        return [tuple(df.columns)] + [tuple(r) for r in df.itertuples(index=False, name=None)]
-    return list(openpyxl.load_workbook(path, data_only=True).active.iter_rows(values_only=True))
+    raw = open(path, "rb").read()
+    if not raw:
+        raise ValueError("arquivo vazio (0 bytes) - export nao gerou dados")
+    low = raw.lower()
+    cabeca = low[:20000]
+
+    ordem = []
+    def add(fn):
+        if fn not in ordem:
+            ordem.append(fn)
+
+    # 1) deteccao por conteudo (nao so pela extensao ou primeiros 4000 bytes)
+    if b"mso-application" in cabeca or (b"spreadsheet" in cabeca and b"<workbook" in cabeca):
+        add(_ler_spreadsheetml)
+    if b"<table" in low or b"<html" in low:
+        add(_ler_html)
+    if raw[:2] == b"PK":
+        add(_ler_xlsx)
+    if raw[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        add(_ler_xls_bin)
+    # 2) fallback: cobre qualquer coisa que a deteccao nao pegou
+    for fn in (_ler_html, _ler_spreadsheetml, _ler_xlsx, _ler_xls_bin, _ler_csv_txt):
+        add(fn)
+
+    erros = []
+    for fn in ordem:
+        try:
+            rows = fn(raw)
+            if rows:
+                return rows
+        except Exception as e:
+            erros.append(fn.__name__ + ": " + str(e).splitlines()[0][:60])
+    raise ValueError("formato nao reconhecido (magic=" + raw[:48].hex() +
+                     ") | tentativas -> " + " ; ".join(erros))
 
 def ler_xls_ctr(path, obra):
     rows = carregar_tabela(path)
