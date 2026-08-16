@@ -167,6 +167,12 @@
     <div class="tbl-wrap"><table id="tblCmp"></table></div>
   </div>
 
+  <div class="panel" style="margin-top:16px" id="secJust">
+    <h3><span class="ttl">Justificativas e plano de ação</span></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Obras com alerta no mês atual (sinal amarelo/vermelho de geração ou atraso de programa). O <b>Engenheiro Responsável</b> preenche a justificativa e o plano de ação — só depois disso a <b>Gerência de Qualidade</b> é notificada. Não precisa de senha.</p>
+    <div id="justWrap"></div>
+  </div>
+
   <div class="panel masteronly" style="margin-top:16px" id="secCarac">
     <h3><span class="ttl">Características das obras (Master)</span><span style="display:flex;gap:8px"><button id="btSalvarNuvem" class="btn sm">Salvar na nuvem</button><button id="btBaixarCarac" class="btn sm" style="background:#8A8F98">Baixar backup</button></span></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Defina área construída, estrutura e o <b>histórico de fases</b> (etapa + data que entrou). As mudanças são salvas na nuvem e <b>todos que abrirem o link veem igual</b>. Se preencheu antes de entrar como Master, clique em <b>Salvar na nuvem</b> uma vez para publicar tudo.</p>
@@ -177,6 +183,16 @@
     <h3><span class="ttl">Controle de Programas (Master)</span><button id="btSalvarProg" class="btn sm">Salvar na nuvem</button></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Para cada obra e programa: marque se está <b>ativo</b> e escreva o status. Salvo na nuvem e visível para todos. Já preenchido a partir da sua planilha — ajuste o que precisar.</p>
     <div id="progWrap"></div>
+  </div>
+
+  <div class="panel masteronly" style="margin-top:16px" id="secFixos">
+    <h3><span class="ttl">E-mails fixos de qualidade (Master)</span><button id="btSalvarFixos" class="btn sm">Salvar na nuvem</button></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Mesmos para todas as obras. O <b>Gestor de Meio Ambiente</b> recebe junto da 1ª notificação; <b>Gerente</b> e <b>Coordenador de Qualidade</b> só após a justificativa do engenheiro.</p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div><label class="lbl">Gestor de Meio Ambiente</label><input id="fxGestorMA" class="inp" type="email" placeholder="gestor.ma@conx.com.br" style="width:240px"></div>
+      <div><label class="lbl">Gerente de Qualidade</label><input id="fxGerenteQ" class="inp" type="email" placeholder="gerente.q@conx.com.br" style="width:240px"></div>
+      <div><label class="lbl">Coordenador de Qualidade</label><input id="fxCoordQ" class="inp" type="email" placeholder="coordenador.q@conx.com.br" style="width:240px"></div>
+    </div>
   </div>
 
   <div class="panel masteronly" style="margin-top:16px" id="secAddObra">
@@ -232,6 +248,7 @@ if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:
 let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
 let MASTER_ON=false;
+let CONFIG={}; let JUST={};
 function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){} if(window._db&&window._auth&&window._auth.currentUser){window._db.collection('painel').doc('caracteristicas').set({dados:ATTRS,atualizado:Date.now()}).catch(e=>console.warn('firestore save',e));}}
 
 function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava|inerte/.test(r))return 'Terraplenagem'; if(/stand/.test(r))return 'Stand de Vendas - Demolição'; if(/demoli/.test(r))return 'Limpeza do Terreno'; return null;}
@@ -482,7 +499,7 @@ function renderProgMatrix(){
     td.querySelectorAll('.pgAtivo,.pgStatus').forEach(el=>el.addEventListener('change',upd)); });
 }
 document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&window._auth&&window._auth.currentUser)){alert('Entre como Master antes de salvar.');return;} window._db.collection('painel').doc('programas').set({dados:PROG,atualizado:Date.now()}).then(()=>alert('Programas salvos na nuvem! Todos veem igual.')).catch(e=>alert('Erro: '+e.message)); };
-renderProgChart(); window.__confReady=true; renderConf();
+renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
 function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){renderCarac();renderProgMatrix();}}
@@ -505,11 +522,17 @@ document.getElementById('masterBtn').onclick=async ()=>{
     firebase.initializeApp(window.FIREBASE_CONFIG);
     window._db=firebase.firestore(); window._auth=firebase.auth();
     window._db.collection('painel').doc('caracteristicas').onSnapshot(snap=>{
-      if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); if(MASTER_ON)renderCarac(); }
+      if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); renderJust(); if(MASTER_ON)renderCarac(); }
     },err=>console.warn('firestore read',err));
     window._db.collection('painel').doc('programas').onSnapshot(snap=>{
-      if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); renderConf(); if(MASTER_ON)renderProgMatrix(); }
+      if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); renderConf(); renderJust(); if(MASTER_ON)renderProgMatrix(); }
     },err=>console.warn('firestore prog',err));
+    window._db.collection('painel').doc('config').onSnapshot(snap=>{
+      if(snap.exists&&snap.data().dados){ CONFIG=snap.data().dados; renderFixos(); }
+    },err=>console.warn('firestore config',err));
+    window._db.collection('painel').doc('justificativas').onSnapshot(snap=>{
+      if(snap.exists&&snap.data().dados){ JUST=snap.data().dados; renderJust(); }
+    },err=>console.warn('firestore just',err));
     window._auth.onAuthStateChanged(u=>setMaster(!!u));
   }catch(e){ console.warn('firebase init',e); setMaster(false); }
 })();
@@ -525,6 +548,12 @@ function renderCarac(){
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
         <div><label class="lbl">Área construída (m²)</label><input class="inp aArea" type="number" min="0" style="width:140px" value="${a.area??''}"></div>
         <div><label class="lbl">Estrutura</label><select class="inp aEstr" style="min-width:200px">${oe}</select></div>
+        <div style="align-self:center;padding-top:14px"><label class="lbl" style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0"><input class="aConcl" type="checkbox" ${a.concluida?'checked':''}> <b>Obra concluída</b> (não notificar)</label></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div><label class="lbl">Eng. Responsável (e-mail)</label><input class="inp aEmEng" type="email" placeholder="engenheiro@conx.com.br" style="width:230px" value="${(a.emails&&a.emails.eng)||''}"></div>
+        <div><label class="lbl">Administrativo da obra (e-mail)</label><input class="inp aEmAdm" type="email" placeholder="adm@conx.com.br" style="width:230px" value="${(a.emails&&a.emails.adm)||''}"></div>
+        <div><label class="lbl">Analista de Qualidade (e-mail)</label><input class="inp aEmAna" type="email" placeholder="analista@conx.com.br" style="width:230px" value="${(a.emails&&a.emails.ana)||''}"></div>
       </div>
       <div class="lbl" style="margin-bottom:6px">Histórico de fases (etapa + data que entrou nela)</div>
       <div class="fasesList">${fr||'<span style="font-size:12px;color:var(--slate)">Nenhuma fase.</span>'}</div>
@@ -532,8 +561,8 @@ function renderCarac(){
   }).join('');
   w.querySelectorAll('.ocard').forEach(card=>{
     const o=card.dataset.o;const ensure=()=>{ATTRS[o]=ATTRS[o]||{};ATTRS[o].fases=ATTRS[o].fases||[];};
-    const salvarBasico=()=>{ensure();ATTRS[o].area=+card.querySelector('.aArea').value||'';ATTRS[o].estrutura=card.querySelector('.aEstr').value;saveAttrs();render();renderCmp();};
-    card.querySelectorAll('.aArea,.aEstr').forEach(el=>el.addEventListener('change',salvarBasico));
+    const salvarBasico=()=>{ensure();ATTRS[o].area=+card.querySelector('.aArea').value||'';ATTRS[o].estrutura=card.querySelector('.aEstr').value;ATTRS[o].emails={eng:card.querySelector('.aEmEng').value.trim(),adm:card.querySelector('.aEmAdm').value.trim(),ana:card.querySelector('.aEmAna').value.trim()};ATTRS[o].concluida=card.querySelector('.aConcl').checked;saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();};
+    card.querySelectorAll('.aArea,.aEstr,.aEmEng,.aEmAdm,.aEmAna,.aConcl').forEach(el=>el.addEventListener('change',salvarBasico));
     const salvarFases=()=>{ensure();ATTRS[o].fases=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
     card.querySelectorAll('.fEt,.fDt,.fDtF').forEach(el=>el.addEventListener('change',salvarFases));
     card.querySelectorAll('.fRm').forEach(b=>b.addEventListener('click',()=>{ensure();ATTRS[o].fases.splice(+b.closest('[data-i]').dataset.i,1);saveAttrs();recomputeEtapas();refreshFiltros();render();renderCarac();renderCmp();}));
@@ -548,6 +577,16 @@ document.getElementById('btSalvarNuvem').onclick=()=>{
     .then(()=>{ alert('Salvo na nuvem! Agora todos que abrirem o link (em qualquer computador) veem os mesmos dados.'); document.getElementById('btSalvarNuvem').textContent='Salvar na nuvem'; })
     .catch(e=>{ alert('Erro ao salvar: '+e.message); document.getElementById('btSalvarNuvem').textContent='Salvar na nuvem'; });
 };
+
+/* ===== E-mails fixos (config) ===== */
+function renderFixos(){ const g=document.getElementById('fxGestorMA'),e=document.getElementById('fxGerenteQ'),c=document.getElementById('fxCoordQ'); if(!g)return; g.value=CONFIG.gestorMA||''; e.value=CONFIG.gerenteQ||''; c.value=CONFIG.coordQ||''; }
+(function(){ const b=document.getElementById('btSalvarFixos'); if(b) b.onclick=()=>{ if(!(window._db&&window._auth&&window._auth.currentUser)){ alert('Entre como Master antes de salvar.'); return; } const dados={gestorMA:document.getElementById('fxGestorMA').value.trim(),gerenteQ:document.getElementById('fxGerenteQ').value.trim(),coordQ:document.getElementById('fxCoordQ').value.trim()}; b.textContent='Salvando...'; window._db.collection('painel').doc('config').set({dados,atualizado:Date.now()}).then(()=>{ alert('E-mails fixos salvos na nuvem!'); b.textContent='Salvar na nuvem'; }).catch(err=>{ alert('Erro: '+err.message); b.textContent='Salvar na nuvem'; }); }; })();
+
+/* ===== Justificativas / plano de ação (aberto) ===== */
+function volConstrutivoAll(){ const m={}; RAW.forEach(r=>{ if(!NAO_CONSTRUTIVAS.has(r.etapa)) m[r.obra]=(m[r.obra]||0)+r.quantidade; }); return m; }
+function alertasObra(o,vol){ const arr=[]; const st=statusCusto(o,vol[o]||0); if(st==='vermelho') arr.push('Sinal vermelho de geração de resíduos (realizado passou do orçado)'); else if(st==='amarelo') arr.push('Sinal amarelo de geração de resíduos (atingiu o limite da fase atual)'); PROG_LISTA.forEach(p=>{ if(progConf(o,p)==='nao') arr.push('Atraso na utilização do programa: '+p); }); return arr; }
+function cicloAtual(){ return new Date().toISOString().slice(0,7); }
+function renderJust(){ const w=document.getElementById('justWrap'); if(!w) return; if(w.contains(document.activeElement)) return; const cyc=cicloAtual(); const vol=volConstrutivoAll(); const cards=[]; OBRAS.forEach(o=>{ if((ATTRS[o]||{}).concluida) return; const al=alertasObra(o,vol); if(!al.length) return; const j=((JUST[o]||{})[cyc])||{}; const ok=j.justificativa&&j.plano; cards.push(`<div class="ocard" data-o="${o}"><div style="font-weight:600;margin-bottom:6px">${o} <span style="color:var(--slate);font-weight:400">— ${progEtapaAtual(o)||'sem etapa'}</span> ${ok?'<span style=\'background:#E6F4EA;color:#217a45;padding:1px 8px;border-radius:4px;font-size:11px\'>respondida ✓</span>':'<span style=\'background:#F7D9D5;color:#C0463B;padding:1px 8px;border-radius:4px;font-size:11px\'>aguardando justificativa</span>'}</div><ul style="margin:0 0 8px 18px;color:#C0463B;font-size:13px">${al.map(a=>`<li>${a}</li>`).join('')}</ul><label class="lbl">Justificativa</label><textarea class="inp jJust" rows="2" style="width:100%;box-sizing:border-box">${j.justificativa||''}</textarea><label class="lbl" style="margin-top:6px">Plano de ação para correção</label><textarea class="inp jPlano" rows="2" style="width:100%;box-sizing:border-box">${j.plano||''}</textarea><div style="margin-top:6px;display:flex;gap:10px;align-items:center"><button class="btn sm jSave">Salvar justificativa</button>${j.data?`<span style="font-size:12px;color:var(--slate)">Salvo em ${new Date(j.data).toLocaleDateString('pt-BR')}</span>`:''}</div></div>`); }); w.innerHTML=cards.length?cards.join(''):'<p style="font-size:12.5px;color:var(--slate)">Nenhuma obra com alerta no momento. 🎉</p>'; w.querySelectorAll('.ocard').forEach(card=>{ const o=card.dataset.o; card.querySelector('.jSave').addEventListener('click',()=>{ const cyc2=cicloAtual(); const jt=card.querySelector('.jJust').value.trim(), pl=card.querySelector('.jPlano').value.trim(); if(!jt||!pl){ alert('Preencha a justificativa E o plano de ação. A Gerência de Qualidade só é notificada com os dois preenchidos.'); return; } JUST[o]=JUST[o]||{}; JUST[o][cyc2]={justificativa:jt,plano:pl,data:Date.now()}; const btn=card.querySelector('.jSave'); if(window._db){ btn.textContent='Salvando...'; window._db.collection('painel').doc('justificativas').set({dados:JUST,atualizado:Date.now()}).then(()=>{ btn.textContent='Salvo ✓'; setTimeout(renderJust,900); }).catch(err=>{ alert('Erro ao salvar: '+err.message); btn.textContent='Salvar justificativa'; }); } else { alert('Sem conexão com a nuvem para salvar.'); } }); }); }
 
 /* ===== Adicionar obra ===== */
 let NOVAS=[];try{NOVAS=JSON.parse(localStorage.getItem('novas_obras')||'[]');}catch(e){NOVAS=[];}

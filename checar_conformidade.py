@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Verificador semanal do Painel de Residuos.
+Notificador mensal do Painel de Residuos (fluxo em 2 etapas).
 
-Envia um e-mail quando ha:
-  A) Nao-conformidade programa x etapa
-     - etapa atual da obra = fase vigente hoje (Firestore painel/caracteristicas)
-     - "em uso" = programa ativo AND status preenchido (nao vazio / "-" / "Nao")
-     - nao-conforme = programa se aplica a etapa atual mas nao esta em uso
-  B) Semaforo de custo amarelo/vermelho
-     - realizado = volume construtivo da obra (m3)
-     - orcado = fator(0,20 alvenaria / 0,22 concreto) x area (m2)
-     - vermelho = realizado > orcado
-     - amarelo  = realizado >= limite da fase atual x orcado
-                  (Estrutura 60%, Estrutura e Acabamentos 70%, Acabamentos 90%)
+Roda toda 1a segunda-feira do mes (e a cada segunda para escalar).
+So considera obras NAO concluidas. Tres gatilhos por obra:
+  - Sinal amarelo de geracao de residuos
+  - Sinal vermelho de geracao de residuos
+  - Atraso na utilizacao de algum programa (aplicavel na etapa, mas nao em uso)
 
-Replica exatamente a logica do index.html. Le dados ao vivo do Firestore
-(leitura publica). Sem Firestore, cai nos defaults commitados.
+Etapa 1 (na 1a segunda do mes): e-mail para Engenheiro Responsavel,
+  Administrativo da obra, Analista de Qualidade e Gestor de Meio Ambiente.
+Etapa 2 (apos o engenheiro registrar justificativa + plano de acao no
+  painel): e-mail para Gerente de Qualidade e Coordenador de Qualidade,
+  ja com a justificativa e o plano.
+
+Fontes ao vivo (Firestore, leitura publica):
+  painel/caracteristicas  -> etapas, area, estrutura, e-mails por obra, concluida
+  painel/programas        -> status/ativo dos programas
+  painel/config           -> 3 e-mails fixos (gestorMA, gerenteQ, coordQ)
+  painel/justificativas   -> justificativa + plano por obra e ciclo (YYYY-MM)
+Estado anti-duplicidade: estado_notificacoes.json (commitado no repo).
 
 Config por variaveis de ambiente (GitHub secrets):
-  FIREBASE_API_KEY (opcional)
-  MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM, MAIL_TO
+  MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM
+  MAIL_TO (opcional, recebe copia de tudo para monitoramento)
+  FIREBASE_API_KEY (opcional; senao le do firebase-config.js)
 """
 
-import os, re, json, sys, ssl, smtplib, datetime, unicodedata
+import os, re, json, sys, ssl, smtplib, datetime, calendar, unicodedata
 import urllib.request, urllib.error
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -31,7 +36,11 @@ from email.utils import formataddr
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ID = "painel-residuos"
-HOJE = datetime.date.today().isoformat()
+PAINEL_URL = "https://guillhermeestefan.github.io/painel-residuos/"
+ESTADO_PATH = os.path.join(BASE_DIR, "estado_notificacoes.json")
+
+HOJE = datetime.date.today()
+CICLO = HOJE.strftime("%Y-%m")
 
 # ---- constantes (identicas ao index.html) ----
 PROGRAMA_ETAPAS = {
@@ -61,14 +70,25 @@ def strip(s):
                    if unicodedata.category(c) != 'Mn').lower()
 
 
-# ---------- defaults commitados ----------
+def valido(email):
+    return bool(email) and '@' in email and '.' in email.split('@')[-1]
+
+
+def primeira_segunda(ano, mes):
+    c = calendar.Calendar(firstweekday=0)
+    for d in c.itermonthdates(ano, mes):
+        if d.month == mes and d.weekday() == 0:
+            return d
+    return datetime.date(ano, mes, 1)
+
+
+# ---------- defaults / dados ----------
 def _read_js_assignment(path, var):
     try:
         txt = open(path, encoding='utf-8').read()
     except OSError:
         return None
-    m = re.search(r'window\.' + re.escape(var) + r'\s*=\s*(\{.*?\}|\[.*?\])\s*;',
-                  txt, re.S)
+    m = re.search(r'window\.' + re.escape(var) + r'\s*=\s*(\{.*?\}|\[.*?\])\s*;', txt, re.S)
     if not m:
         return None
     try:
@@ -78,17 +98,14 @@ def _read_js_assignment(path, var):
 
 
 def load_defaults():
-    prog = _read_js_assignment(os.path.join(BASE_DIR, 'programas-init.js'),
-                               'PROGRAMAS_INIT') or {}
-    lista = _read_js_assignment(os.path.join(BASE_DIR, 'programas-init.js'),
-                                'PROGRAMAS_LISTA') or list(PROGRAMA_ETAPAS.keys())
+    prog = _read_js_assignment(os.path.join(BASE_DIR, 'programas-init.js'), 'PROGRAMAS_INIT') or {}
+    lista = _read_js_assignment(os.path.join(BASE_DIR, 'programas-init.js'), 'PROGRAMAS_LISTA') or list(PROGRAMA_ETAPAS.keys())
     return prog, lista
 
 
 def load_raw():
-    path = os.path.join(BASE_DIR, 'base_consolidada.json')
     try:
-        data = json.load(open(path, encoding='utf-8'))
+        data = json.load(open(os.path.join(BASE_DIR, 'base_consolidada.json'), encoding='utf-8'))
     except OSError:
         return []
     for r in data:
@@ -97,7 +114,19 @@ def load_raw():
     return data
 
 
-# ---------- Firestore REST (leitura publica) ----------
+def load_estado():
+    try:
+        return json.load(open(ESTADO_PATH, encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_estado(estado):
+    with open(ESTADO_PATH, 'w', encoding='utf-8') as f:
+        json.dump(estado, f, ensure_ascii=False, indent=1)
+
+
+# ---------- Firestore REST ----------
 def _decode(v):
     if 'nullValue' in v: return None
     if 'booleanValue' in v: return v['booleanValue']
@@ -113,7 +142,6 @@ def _decode(v):
 
 
 def _api_key_from_config():
-    """Le apiKey do firebase-config.js (ja publico no repo) como fallback."""
     try:
         txt = open(os.path.join(BASE_DIR, 'firebase-config.js'), encoding='utf-8').read()
     except OSError:
@@ -132,7 +160,7 @@ def firestore_get(doc):
         req = urllib.request.Request(url, headers={'User-Agent': 'conx-checker'})
         with urllib.request.urlopen(req, timeout=30) as resp:
             payload = json.loads(resp.read().decode('utf-8'))
-    except Exception as e:  # noqa: BLE001 (falha silenciosa proposital)
+    except Exception as e:  # noqa: BLE001
         print(f"[aviso] Firestore '{doc}' indisponivel: {e}", file=sys.stderr)
         return None
     fields = payload.get('fields', {})
@@ -141,11 +169,10 @@ def firestore_get(doc):
     return _decode(fields['dados'])
 
 
-# ---------- regra: etapa vigente ----------
+# ---------- regra ----------
 def fase_na_data(attrs, obra, data_iso):
     fs = ((attrs.get(obra) or {}).get('fases')) or []
-    ordf = sorted([f for f in fs if f.get('etapa') and f.get('data')],
-                  key=lambda f: f['data'])
+    ordf = sorted([f for f in fs if f.get('etapa') and f.get('data')], key=lambda f: f['data'])
     cur = None
     for f in ordf:
         if f['data'] <= data_iso and (not f.get('dataFim') or data_iso <= f['dataFim']):
@@ -153,7 +180,6 @@ def fase_na_data(attrs, obra, data_iso):
     return cur
 
 
-# ---------- A) conformidade programa x etapa ----------
 def prog_aplicavel(p, et):
     if not et:
         return False
@@ -170,23 +196,6 @@ def prog_em_uso(cell):
     return s not in ('', '-', 'não', 'nao')
 
 
-def checar_conformidade(obras, prog, attrs, lista):
-    por_obra, por_programa = {}, {}
-    for o in obras:
-        et = fase_na_data(attrs, o, HOJE)
-        if not et:
-            continue
-        for p in lista:
-            if not prog_aplicavel(p, et):
-                continue
-            cell = (prog.get(o) or {}).get(p) or {}
-            if not prog_em_uso(cell):
-                por_obra.setdefault(o, {'etapa': et, 'progs': []})['progs'].append(p)
-                por_programa.setdefault(p, []).append(o)
-    return por_obra, por_programa
-
-
-# ---------- B) semaforo de custo ----------
 def etapa_especial(residuo):
     r = strip(residuo)
     if re.search(r'solo|terrapl|escava|inerte', r): return 'Terraplenagem'
@@ -219,159 +228,150 @@ def status_custo(attrs, o, real):
     orc = fat * area
     if real > orc:
         return 'vermelho'
-    lim = LIM_AMARELO.get(fase_na_data(attrs, o, HOJE))
+    lim = LIM_AMARELO.get(fase_na_data(attrs, o, HOJE.isoformat()))
     if lim is not None and real >= lim * orc:
         return 'amarelo'
     return 'verde'
 
 
-def checar_custo(obras, attrs, vol):
-    alertas = []  # (obra, status, real, orcado, pct, etapa)
-    for o in obras:
-        real = vol.get(o, 0.0)
-        st = status_custo(attrs, o, real)
-        if st not in ('amarelo', 'vermelho'):
-            continue
-        a = attrs.get(o) or {}
-        orc = FATOR_ORC.get(a.get('estrutura'), 0) * float(a.get('area') or 0)
-        pct = (real / orc * 100) if orc else 0
-        alertas.append({'obra': o, 'status': st, 'real': real, 'orc': orc,
-                        'pct': pct, 'etapa': fase_na_data(attrs, o, HOJE) or '—'})
-    ordem = {'vermelho': 0, 'amarelo': 1}
-    alertas.sort(key=lambda x: (ordem[x['status']], -x['pct']))
-    return alertas
+def alertas_obra(o, attrs, prog, lista, vol):
+    et = fase_na_data(attrs, o, HOJE.isoformat())
+    itens = []
+    st = status_custo(attrs, o, vol.get(o, 0.0))
+    if st == 'vermelho':
+        itens.append('Sinal vermelho de geração de resíduos (realizado passou do orçado)')
+    elif st == 'amarelo':
+        itens.append('Sinal amarelo de geração de resíduos (atingiu o limite da fase atual)')
+    if et:
+        for p in lista:
+            if prog_aplicavel(p, et) and not prog_em_uso((prog.get(o) or {}).get(p) or {}):
+                itens.append('Atraso na utilização do programa: ' + p)
+    return et, itens
 
 
 # ---------- e-mail ----------
-def montar_html(por_obra, por_programa, custo):
-    total_nc = sum(len(v['progs']) for v in por_obra.values())
-    partes = [f"""<div style="font-family:Arial,Helvetica,sans-serif;color:#222;max-width:760px">
-  <h2 style="color:#1F6F43;margin:0 0 4px">Painel de Resíduos — Alertas da semana</h2>
-  <p style="color:#666;margin:0 0 18px">Verificação de {HOJE}.</p>"""]
-
-    # Secao custo
-    if custo:
-        vermelhos = sum(1 for c in custo if c['status'] == 'vermelho')
-        amarelos = sum(1 for c in custo if c['status'] == 'amarelo')
-        linhas = []
-        for c in custo:
-            cor = '#C0463B' if c['status'] == 'vermelho' else '#E0A423'
-            tag = 'ESTOUROU' if c['status'] == 'vermelho' else 'ATENÇÃO'
-            linhas.append(
-                f"<tr><td style='padding:8px;border-bottom:1px solid #eee;font-weight:600'>{c['obra']}</td>"
-                f"<td style='padding:8px;border-bottom:1px solid #eee'><span style='background:{cor};color:#fff;padding:2px 8px;border-radius:4px;font-size:12px'>{tag}</span></td>"
-                f"<td style='padding:8px;border-bottom:1px solid #eee;color:#555'>{c['etapa']}</td>"
-                f"<td style='padding:8px;border-bottom:1px solid #eee;text-align:right'>{c['real']:.0f} / {c['orc']:.0f} m³</td>"
-                f"<td style='padding:8px;border-bottom:1px solid #eee;text-align:right;font-weight:600;color:{cor}'>{c['pct']:.0f}%</td></tr>")
-        partes.append(f"""
-  <h3 style="margin:18px 0 6px;color:#C0463B">Semáforo de custo — {vermelhos} vermelho(s), {amarelos} amarelo(s)</h3>
-  <table style="border-collapse:collapse;width:100%;font-size:14px">
-    <thead><tr style="background:#FAFBFC;text-align:left">
-      <th style="padding:8px;border-bottom:2px solid #ddd">Obra</th>
-      <th style="padding:8px;border-bottom:2px solid #ddd">Status</th>
-      <th style="padding:8px;border-bottom:2px solid #ddd">Etapa</th>
-      <th style="padding:8px;border-bottom:2px solid #ddd;text-align:right">Realizado / Orçado</th>
-      <th style="padding:8px;border-bottom:2px solid #ddd;text-align:right">% do orçado</th>
-    </tr></thead><tbody>{''.join(linhas)}</tbody></table>""")
-
-    # Secao conformidade
-    if por_obra:
-        linhas = []
-        for o in sorted(por_obra):
-            progs = ', '.join(por_obra[o]['progs'])
-            linhas.append(
-                f"<tr><td style='padding:8px;border-bottom:1px solid #eee;font-weight:600'>{o}</td>"
-                f"<td style='padding:8px;border-bottom:1px solid #eee;color:#555'>{por_obra[o]['etapa']}</td>"
-                f"<td style='padding:8px;border-bottom:1px solid #eee;color:#C0463B'>{progs}</td></tr>")
-        resumo = ''.join(
-            f"<li><b>{p}</b>: {len(obs)} obra(s) — {', '.join(sorted(obs))}</li>"
-            for p, obs in sorted(por_programa.items(), key=lambda kv: -len(kv[1])))
-        partes.append(f"""
-  <h3 style="margin:22px 0 6px;color:#C0463B">Não-conformidade programa × etapa — {total_nc} item(ns) em {len(por_obra)} obra(s)</h3>
-  <table style="border-collapse:collapse;width:100%;font-size:14px">
-    <thead><tr style="background:#FAFBFC;text-align:left">
-      <th style="padding:8px;border-bottom:2px solid #ddd">Obra</th>
-      <th style="padding:8px;border-bottom:2px solid #ddd">Etapa atual</th>
-      <th style="padding:8px;border-bottom:2px solid #ddd">Programas a cobrar</th>
-    </tr></thead><tbody>{''.join(linhas)}</tbody></table>
-  <p style="font-size:13px;color:#444;margin:8px 0 0"><b>Por programa:</b></p>
-  <ul style="font-size:13px;line-height:1.6;color:#333">{resumo}</ul>""")
-
-    partes.append("""
-  <p style="color:#999;font-size:12px;margin-top:22px">Mensagem automática semanal.
-  "Em uso" = programa ativo + status preenchido. Abra o painel para a matriz completa.</p>
-</div>""")
-    return ''.join(partes)
+def _wrap(inner):
+    return (f'<div style="font-family:Arial,Helvetica,sans-serif;color:#222;max-width:720px">{inner}'
+            f'<p style="color:#999;font-size:12px;margin-top:22px">Mensagem automática do Painel de Resíduos. '
+            f'Abra o painel: <a href="{PAINEL_URL}">{PAINEL_URL}</a></p></div>')
 
 
-def enviar_email(html, assunto):
+def html_etapa1(obra, etapa, itens):
+    li = ''.join(f'<li>{i}</li>' for i in itens)
+    return _wrap(f"""
+  <h2 style="color:#C0463B;margin:0 0 4px">{obra} — alertas do mês</h2>
+  <p style="color:#666;margin:0 0 14px">Etapa atual: <b>{etapa or '—'}</b> · verificação de {HOJE.isoformat()}.</p>
+  <ul style="font-size:14px;line-height:1.6;color:#333">{li}</ul>
+  <p style="font-size:14px;background:#FFF6E6;border:1px solid #E0A423;border-radius:6px;padding:10px 12px">
+  <b>Engenheiro Responsável:</b> acesse o painel e registre a <b>justificativa</b> e o <b>plano de ação</b> na seção
+  “Justificativas e plano de ação”. A Gerência de Qualidade só é notificada após esse registro.</p>""")
+
+
+def html_etapa2(obra, etapa, itens, just, plano, data_ts):
+    li = ''.join(f'<li>{i}</li>' for i in itens)
+    quando = ''
+    if data_ts:
+        try:
+            quando = datetime.datetime.fromtimestamp(int(data_ts) / 1000).strftime('%d/%m/%Y')
+        except (ValueError, OSError):
+            quando = ''
+    return _wrap(f"""
+  <h2 style="color:#1F6F43;margin:0 0 4px">{obra} — justificativa registrada</h2>
+  <p style="color:#666;margin:0 0 14px">Etapa atual: <b>{etapa or '—'}</b>{' · registrado em ' + quando if quando else ''}.</p>
+  <p style="font-size:14px;margin:0 0 6px"><b>Alertas:</b></p>
+  <ul style="font-size:14px;line-height:1.6;color:#333">{li}</ul>
+  <p style="font-size:14px;margin:12px 0 4px"><b>Justificativa do Engenheiro Responsável:</b></p>
+  <p style="font-size:14px;background:#F7F9FA;border:1px solid #e3e6ea;border-radius:6px;padding:10px 12px;white-space:pre-wrap">{just}</p>
+  <p style="font-size:14px;margin:12px 0 4px"><b>Plano de ação:</b></p>
+  <p style="font-size:14px;background:#F7F9FA;border:1px solid #e3e6ea;border-radius:6px;padding:10px 12px;white-space:pre-wrap">{plano}</p>""")
+
+
+def enviar(assunto, html, destinatarios):
+    dest = sorted(set(d for d in destinatarios if valido(d)))
+    if not dest:
+        print(f"   (sem destinatários válidos — não enviado: {assunto})")
+        return False
     server = os.environ.get('MAIL_SERVER', '')
     port = int(os.environ.get('MAIL_PORT', '587'))
     user = os.environ.get('MAIL_USERNAME', '')
     pwd = os.environ.get('MAIL_PASSWORD', '')
     mail_from = os.environ.get('MAIL_FROM', user)
-    mail_to = os.environ.get('MAIL_TO', 'guilherme.estefan@conx.com.br')
     if not (server and user and pwd):
-        print("[aviso] SMTP nao configurado. E-mail nao enviado. Previa:\n")
-        print(html)
+        print(f"   [PRÉVIA — SMTP não configurado] Para: {', '.join(dest)} | {assunto}")
         return False
     msg = MIMEMultipart('alternative')
     msg['Subject'] = assunto
     msg['From'] = formataddr(("Painel de Resíduos Conx", mail_from))
-    msg['To'] = mail_to
+    msg['To'] = ', '.join(dest)
     msg.attach(MIMEText("Seu cliente de e-mail não suporta HTML.", 'plain', 'utf-8'))
     msg.attach(MIMEText(html, 'html', 'utf-8'))
-    dest = [a.strip() for a in mail_to.split(',') if a.strip()]
     ctx = ssl.create_default_context()
     if port == 465:
-        with smtplib.SMTP_SSL(server, port, context=ctx, timeout=30) as s:
-            s.login(user, pwd); s.sendmail(mail_from, dest, msg.as_string())
+        with smtplib.SMTP_SSL(server, port, context=ctx, timeout=30) as sv:
+            sv.login(user, pwd); sv.sendmail(mail_from, dest, msg.as_string())
     else:
-        with smtplib.SMTP(server, port, timeout=30) as s:
-            s.ehlo(); s.starttls(context=ctx); s.login(user, pwd)
-            s.sendmail(mail_from, dest, msg.as_string())
-    print(f"[ok] E-mail enviado para {mail_to}.")
+        with smtplib.SMTP(server, port, timeout=30) as sv:
+            sv.ehlo(); sv.starttls(context=ctx); sv.login(user, pwd)
+            sv.sendmail(mail_from, dest, msg.as_string())
+    print(f"   [ENVIADO] {assunto} -> {', '.join(dest)}")
     return True
 
 
 def main():
-    defaults_prog, lista = load_defaults()
     raw = load_raw()
-    obras = []
-    seen = set()
+    obras, seen = [], set()
     for r in raw:
         o = (r.get('obra') or '').strip()
         if o and o not in seen:
             seen.add(o); obras.append(o)
 
-    prog_fs = firestore_get('programas')
+    defaults_prog, lista = load_defaults()
+    prog = firestore_get('programas') or defaults_prog
     attrs = firestore_get('caracteristicas') or {}
-    prog = prog_fs if prog_fs else defaults_prog
-    fonte = 'Firestore' if prog_fs else 'defaults(programas-init.js)'
+    config = firestore_get('config') or {}
+    justs = firestore_get('justificativas') or {}
+    estado = load_estado()
+    estado.setdefault(CICLO, {})
 
-    por_obra, por_programa = checar_conformidade(obras, prog, attrs, lista)
     vol = volume_construtivo(raw, attrs)
-    custo = checar_custo(obras, attrs, vol)
+    pmonday = primeira_segunda(HOJE.year, HOJE.month)
+    monitor = [e.strip() for e in os.environ.get('MAIL_TO', '').split(',') if e.strip()]
 
-    total_nc = sum(len(v['progs']) for v in por_obra.values())
-    n_etapa = sum(1 for o in obras if fase_na_data(attrs, o, HOJE))
-    print(f"Obras: {len(obras)} | com etapa: {n_etapa} | fonte programas: {fonte}")
-    print(f"Nao-conformidades: {total_nc} em {len(por_obra)} obra(s)")
-    print(f"Custo: {sum(1 for c in custo if c['status']=='vermelho')} vermelho, "
-          f"{sum(1 for c in custo if c['status']=='amarelo')} amarelo")
+    fixos_ma = config.get('gestorMA', '')
+    fixos_ger = config.get('gerenteQ', '')
+    fixos_coord = config.get('coordQ', '')
 
-    if total_nc == 0 and not custo:
-        print("Nada a reportar. Nenhum e-mail enviado.")
-        return
-    partes = []
-    if custo:
-        partes.append(f"{sum(1 for c in custo if c['status']=='vermelho')}🔴 "
-                      f"{sum(1 for c in custo if c['status']=='amarelo')}🟡 custo")
-    if total_nc:
-        partes.append(f"{total_nc} não-conformidade(s)")
-    assunto = f"[Painel Resíduos] {' + '.join(partes)} — {HOJE}"
-    html = montar_html(por_obra, por_programa, custo)
-    enviar_email(html, assunto)
+    print(f"Ciclo {CICLO} | hoje {HOJE} | 1a segunda {pmonday} | obras {len(obras)}")
+    env1 = env2 = 0
+
+    for o in obras:
+        if (attrs.get(o) or {}).get('concluida'):
+            continue
+        etapa, itens = alertas_obra(o, attrs, prog, lista, vol)
+        if not itens:
+            continue
+        st = estado[CICLO].setdefault(o, {})
+        emails = (attrs.get(o) or {}).get('emails') or {}
+
+        # Etapa 1
+        if HOJE >= pmonday and not st.get('stage1'):
+            dest = [emails.get('eng'), emails.get('adm'), emails.get('ana'), fixos_ma] + monitor
+            if enviar(f"[Painel Resíduos] {o} — alertas do mês ({CICLO})",
+                      html_etapa1(o, etapa, itens), dest):
+                st['stage1'] = datetime.datetime.now().isoformat(timespec='seconds')
+                env1 += 1
+
+        # Etapa 2 (apos justificativa + plano)
+        j = (justs.get(o) or {}).get(CICLO) or {}
+        if st.get('stage1') and j.get('justificativa') and j.get('plano') and not st.get('stage2'):
+            dest = [fixos_ger, fixos_coord] + monitor
+            if enviar(f"[Painel Resíduos] {o} — justificativa registrada ({CICLO})",
+                      html_etapa2(o, etapa, itens, j['justificativa'], j['plano'], j.get('data')), dest):
+                st['stage2'] = datetime.datetime.now().isoformat(timespec='seconds')
+                env2 += 1
+
+    save_estado(estado)
+    print(f"Etapa 1 enviadas: {env1} | Etapa 2 enviadas: {env2}")
 
 
 if __name__ == '__main__':
