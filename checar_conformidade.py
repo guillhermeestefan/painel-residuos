@@ -234,19 +234,23 @@ def status_custo(attrs, o, real):
     return 'verde'
 
 
-def alertas_obra(o, attrs, prog, lista, vol):
+TIPOS = [('atraso', 'Atraso de programa'), ('custo', 'Sinal de custo (amarelo/vermelho)')]
+
+
+def alertas_tipos(o, attrs, prog, lista, vol):
     et = fase_na_data(attrs, o, HOJE.isoformat())
-    itens = []
-    st = status_custo(attrs, o, vol.get(o, 0.0))
-    if st == 'vermelho':
-        itens.append('Sinal vermelho de geração de resíduos (realizado passou do orçado)')
-    elif st == 'amarelo':
-        itens.append('Sinal amarelo de geração de resíduos (atingiu o limite da fase atual)')
+    atraso = []
     if et:
         for p in lista:
             if prog_aplicavel(p, et) and not prog_em_uso((prog.get(o) or {}).get(p) or {}):
-                itens.append('Atraso na utilização do programa: ' + p)
-    return et, itens
+                atraso.append('Atraso na utilização do programa: ' + p)
+    custo = []
+    st = status_custo(attrs, o, vol.get(o, 0.0))
+    if st == 'vermelho':
+        custo.append('Sinal vermelho de geração de resíduos (realizado passou do orçado)')
+    elif st == 'amarelo':
+        custo.append('Sinal amarelo de geração de resíduos (atingiu o limite da fase atual)')
+    return et, {'atraso': atraso, 'custo': custo}
 
 
 # ---------- e-mail ----------
@@ -256,18 +260,25 @@ def _wrap(inner):
             f'Abra o painel: <a href="{PAINEL_URL}">{PAINEL_URL}</a></p></div>')
 
 
-def html_etapa1(obra, etapa, itens):
-    li = ''.join(f'<li>{i}</li>' for i in itens)
+def html_etapa1(obra, etapa, tipos):
+    secs = ''
+    for k, nome in TIPOS:
+        it = tipos.get(k) or []
+        if not it:
+            continue
+        li = ''.join(f'<li>{i}</li>' for i in it)
+        secs += (f'<p style="font-size:14px;margin:12px 0 2px"><b>{nome}:</b></p>'
+                 f'<ul style="font-size:14px;line-height:1.6;color:#333">{li}</ul>')
     return _wrap(f"""
   <h2 style="color:#C0463B;margin:0 0 4px">{obra} — alertas do mês</h2>
-  <p style="color:#666;margin:0 0 14px">Etapa atual: <b>{etapa or '—'}</b> · verificação de {HOJE.isoformat()}.</p>
-  <ul style="font-size:14px;line-height:1.6;color:#333">{li}</ul>
+  <p style="color:#666;margin:0 0 8px">Etapa atual: <b>{etapa or '—'}</b> · verificação de {HOJE.isoformat()}.</p>
+  {secs}
   <p style="font-size:14px;background:#FFF6E6;border:1px solid #E0A423;border-radius:6px;padding:10px 12px">
-  <b>Engenheiro Responsável:</b> acesse o painel e registre a <b>justificativa</b> e o <b>plano de ação</b> na seção
-  “Justificativas e plano de ação”. A Gerência de Qualidade só é notificada após esse registro.</p>""")
+  <b>Engenheiro Responsável:</b> faça login no painel e registre a <b>justificativa</b> e o <b>plano de ação</b>
+  de cada tipo na seção “Justificativas e plano de ação”. A Gerência de Qualidade só é notificada após esse registro.</p>""")
 
 
-def html_etapa2(obra, etapa, itens, just, plano, data_ts):
+def html_etapa2(obra, etapa, nome_tipo, itens, just, plano, data_ts):
     li = ''.join(f'<li>{i}</li>' for i in itens)
     quando = ''
     if data_ts:
@@ -276,9 +287,9 @@ def html_etapa2(obra, etapa, itens, just, plano, data_ts):
         except (ValueError, OSError):
             quando = ''
     return _wrap(f"""
-  <h2 style="color:#1F6F43;margin:0 0 4px">{obra} — justificativa registrada</h2>
+  <h2 style="color:#1F6F43;margin:0 0 4px">{obra} — justificativa registrada ({nome_tipo})</h2>
   <p style="color:#666;margin:0 0 14px">Etapa atual: <b>{etapa or '—'}</b>{' · registrado em ' + quando if quando else ''}.</p>
-  <p style="font-size:14px;margin:0 0 6px"><b>Alertas:</b></p>
+  <p style="font-size:14px;margin:0 0 6px"><b>Alertas ({nome_tipo}):</b></p>
   <ul style="font-size:14px;line-height:1.6;color:#333">{li}</ul>
   <p style="font-size:14px;margin:12px 0 4px"><b>Justificativa do Engenheiro Responsável:</b></p>
   <p style="font-size:14px;background:#F7F9FA;border:1px solid #e3e6ea;border-radius:6px;padding:10px 12px;white-space:pre-wrap">{just}</p>
@@ -347,28 +358,34 @@ def main():
     for o in obras:
         if (attrs.get(o) or {}).get('concluida'):
             continue
-        etapa, itens = alertas_obra(o, attrs, prog, lista, vol)
-        if not itens:
+        etapa, tipos = alertas_tipos(o, attrs, prog, lista, vol)
+        if not (tipos['atraso'] or tipos['custo']):
             continue
         st = estado[CICLO].setdefault(o, {})
+        st.setdefault('stage2', {})
         emails = (attrs.get(o) or {}).get('emails') or {}
 
-        # Etapa 1
+        # Etapa 1 (uma vez por obra, na 1a segunda) — todos os tipos juntos
         if HOJE >= pmonday and not st.get('stage1'):
-            dest = [emails.get('eng'), emails.get('adm'), emails.get('ana'), fixos_ma] + monitor
+            dest = [emails.get('eng'), emails.get('adm'), emails.get('est'), fixos_ma] + monitor
             if enviar(f"[Painel Resíduos] {o} — alertas do mês ({CICLO})",
-                      html_etapa1(o, etapa, itens), dest):
+                      html_etapa1(o, etapa, tipos), dest):
                 st['stage1'] = datetime.datetime.now().isoformat(timespec='seconds')
                 env1 += 1
 
-        # Etapa 2 (apos justificativa + plano)
-        j = (justs.get(o) or {}).get(CICLO) or {}
-        if st.get('stage1') and j.get('justificativa') and j.get('plano') and not st.get('stage2'):
-            dest = [fixos_ger, fixos_coord] + monitor
-            if enviar(f"[Painel Resíduos] {o} — justificativa registrada ({CICLO})",
-                      html_etapa2(o, etapa, itens, j['justificativa'], j['plano'], j.get('data')), dest):
-                st['stage2'] = datetime.datetime.now().isoformat(timespec='seconds')
-                env2 += 1
+        # Etapa 2 por tipo (apos justificativa + plano daquele tipo)
+        jcyc = (justs.get(o) or {}).get(CICLO) or {}
+        for k, nome in TIPOS:
+            it = tipos.get(k) or []
+            if not it:
+                continue
+            jt = jcyc.get(k) or {}
+            if st.get('stage1') and jt.get('justificativa') and jt.get('plano') and not st['stage2'].get(k):
+                dest = [fixos_ger, fixos_coord] + monitor
+                if enviar(f"[Painel Resíduos] {o} — justificativa registrada: {nome} ({CICLO})",
+                          html_etapa2(o, etapa, nome, it, jt['justificativa'], jt['plano'], jt.get('data')), dest):
+                    st['stage2'][k] = datetime.datetime.now().isoformat(timespec='seconds')
+                    env2 += 1
 
     save_estado(estado)
     print(f"Etapa 1 enviadas: {env1} | Etapa 2 enviadas: {env2}")
