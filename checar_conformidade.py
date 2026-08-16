@@ -393,18 +393,21 @@ def main():
                 st['stage1'] = datetime.datetime.now().isoformat(timespec='seconds')
                 env1 += 1
 
-        # Etapa 2 por tipo (apos justificativa + plano daquele tipo)
+        # Etapa 2 por item (cada atraso de programa + o custo), apos justificativa + plano
         jcyc = (justs.get(o) or {}).get(CICLO) or {}
-        for k, nome in TIPOS:
-            it = tipos.get(k) or []
-            if not it:
-                continue
-            jt = jcyc.get(k) or {}
-            if st.get('stage1') and jt.get('justificativa') and jt.get('plano') and not st['stage2'].get(k):
+        itens_nc = []
+        for txt in tipos.get('atraso', []):
+            prog = txt.replace('Atraso na utilização do programa: ', '')
+            itens_nc.append(('atraso:' + prog, 'Atraso — ' + prog, [txt]))
+        if tipos.get('custo'):
+            itens_nc.append(('custo', 'Sinal de custo (amarelo/vermelho)', tipos['custo']))
+        for key, nome, it in itens_nc:
+            jt = jcyc.get(key) or {}
+            if st.get('stage1') and jt.get('justificativa') and jt.get('plano') and not st['stage2'].get(key):
                 dest = [fixos_ger, fixos_coord] + monitor
                 if enviar(f"[Painel Resíduos] {o} — justificativa registrada: {nome} ({CICLO})",
                           html_etapa2(o, etapa, nome, it, jt['justificativa'], jt['plano'], jt.get('data')), dest):
-                    st['stage2'][k] = datetime.datetime.now().isoformat(timespec='seconds')
+                    st['stage2'][key] = datetime.datetime.now().isoformat(timespec='seconds')
                     env2 += 1
 
     save_estado(estado)
