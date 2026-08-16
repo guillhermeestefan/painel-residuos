@@ -328,6 +328,17 @@ def enviar(assunto, html, destinatarios):
     return True
 
 
+def emails_por_papel(usuarios, papel):
+    """Todos os e-mails (logins) ativos com determinado papel (visao global)."""
+    out = []
+    for login, rec in (usuarios or {}).items():
+        if (rec or {}).get('ativo') is False:
+            continue
+        if (rec or {}).get('papel') == papel and valido(login):
+            out.append(login)
+    return out
+
+
 def recipientes_obra(o, usuarios):
     """E-mails (logins) por papel para a obra: eng pode ter varias obras (rec['obras'])."""
     eng, adm, est = [], [], []
@@ -368,9 +379,9 @@ def main():
     pmonday = primeira_segunda(HOJE.year, HOJE.month)
     monitor = [e.strip() for e in os.environ.get('MAIL_TO', '').split(',') if e.strip()]
 
-    fixos_ma = config.get('gestorMA', '')
-    fixos_ger = config.get('gerenteQ', '')
-    fixos_coord = config.get('coordQ', '')
+    ma_r = emails_por_papel(usuarios, 'gestor_ma')
+    ger_r = emails_por_papel(usuarios, 'gerente_q')
+    coord_r = emails_por_papel(usuarios, 'coord_q')
 
     print(f"Ciclo {CICLO} | hoje {HOJE} | 1a segunda {pmonday} | obras {len(obras)}")
     env1 = env2 = 0
@@ -387,7 +398,7 @@ def main():
 
         # Etapa 1 (uma vez por obra, na 1a segunda) — todos os tipos juntos
         if HOJE >= pmonday and not st.get('stage1'):
-            dest = eng_r + adm_r + est_r + [fixos_ma] + monitor
+            dest = eng_r + adm_r + est_r + ma_r + monitor
             if enviar(f"[Painel Resíduos] {o} — alertas do mês ({CICLO})",
                       html_etapa1(o, etapa, tipos), dest):
                 st['stage1'] = datetime.datetime.now().isoformat(timespec='seconds')
@@ -404,7 +415,7 @@ def main():
         for key, nome, it in itens_nc:
             jt = jcyc.get(key) or {}
             if st.get('stage1') and jt.get('justificativa') and jt.get('plano') and not st['stage2'].get(key):
-                dest = [fixos_ger, fixos_coord] + monitor
+                dest = ger_r + coord_r + monitor
                 if enviar(f"[Painel Resíduos] {o} — justificativa registrada: {nome} ({CICLO})",
                           html_etapa2(o, etapa, nome, it, jt['justificativa'], jt['plano'], jt.get('data')), dest):
                     st['stage2'][key] = datetime.datetime.now().isoformat(timespec='seconds')
