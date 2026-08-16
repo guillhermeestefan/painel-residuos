@@ -623,12 +623,16 @@ function trocarMinhaSenha(){ if(!(SESSION&&PAPEIS[SESSION.papel])){ alert('Faça
 function logoutAll(){ try{ if(window._auth&&window._auth.currentUser) window._auth.signOut(); }catch(e){} SESSION=null; try{sessionStorage.removeItem('equipe');sessionStorage.removeItem('master');}catch(e){} setMaster(false); updateSessionUI(); lockPanel(); const u=document.getElementById('lgUser'),p=document.getElementById('lgPass'); if(u)u.value=''; if(p)p.value=''; }
 function lgErro(m){ const e=document.getElementById('lgErro'); if(e){ e.textContent=m||''; e.style.display=m?'block':'none'; } }
 function loginScreenSubmit(){ const u=(document.getElementById('lgUser').value||'').trim(); const p=document.getElementById('lgPass').value||''; if(!u||!p){ lgErro('Preencha usuário e senha.'); return; } lgErro('');
-  if(u.includes('@')){ if(!window._auth){ lgErro('Servidor indisponível no momento.'); return; } const lb=document.getElementById('lgBtn'); lb.textContent='Entrando...'; window._auth.signInWithEmailAndPassword(u,p).then(()=>{ lb.textContent='Entrar'; }).catch(()=>{ lgErro('Usuário ou senha inválidos.'); lb.textContent='Entrar'; }); return; }
   const rec=USUARIOS[u];
-  if(rec && String(rec.senha)===String(p)){ SESSION={login:u,papel:rec.papel,obra:rec.obra}; try{sessionStorage.setItem('equipe',JSON.stringify(SESSION));}catch(e){} openPanel(); updateSessionUI(); renderJust(); }
-  else if(u==='master' && p===MASTER_PW && !window._auth){ sessionStorage.setItem('master','1'); setMaster(true); SESSION={login:'master',papel:'master'}; openPanel(); updateSessionUI(); }
-  else if(!Object.keys(USUARIOS).length){ lgErro('Carregando acessos… tente novamente em instantes.'); }
-  else { lgErro('Usuário ou senha inválidos.'); }
+  if(rec){
+    if(String(rec.senha)===String(p)){ SESSION={login:u,papel:rec.papel,obra:rec.obra}; try{sessionStorage.setItem('equipe',JSON.stringify(SESSION));}catch(e){} openPanel(); updateSessionUI(); renderJust(); }
+    else { lgErro('Usuário ou senha inválidos.'); }
+    return;
+  }
+  if(u.includes('@') && window._auth){ const lb=document.getElementById('lgBtn'); lb.textContent='Entrando...'; window._auth.signInWithEmailAndPassword(u,p).then(()=>{ lb.textContent='Entrar'; }).catch(()=>{ lgErro('Usuário ou senha inválidos.'); lb.textContent='Entrar'; }); return; }
+  if(u==='master' && p===MASTER_PW && !window._auth){ sessionStorage.setItem('master','1'); setMaster(true); SESSION={login:'master',papel:'master'}; openPanel(); updateSessionUI(); return; }
+  if(!Object.keys(USUARIOS).length){ lgErro('Carregando acessos… tente novamente em instantes.'); return; }
+  lgErro('Usuário ou senha inválidos.');
 }
 (function(){ try{ const raw=sessionStorage.getItem('equipe'); if(raw)SESSION=JSON.parse(raw); }catch(e){}
   const sair=document.getElementById('loginBtn'); if(sair) sair.onclick=logoutAll; const tsb=document.getElementById('trocaSenhaBtn'); if(tsb) tsb.onclick=trocarMinhaSenha;
