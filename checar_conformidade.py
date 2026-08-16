@@ -328,6 +328,23 @@ def enviar(assunto, html, destinatarios):
     return True
 
 
+def recipientes_obra(o, usuarios):
+    """E-mails (logins) por papel para a obra: eng pode ter varias obras (rec['obras'])."""
+    eng, adm, est = [], [], []
+    for login, rec in (usuarios or {}).items():
+        papel = (rec or {}).get('papel')
+        if papel == 'eng':
+            if o in ((rec.get('obras')) or ([rec['obra']] if rec.get('obra') else [])):
+                eng.append(login)
+        elif papel == 'adm':
+            if rec.get('obra') == o:
+                adm.append(login)
+        elif papel == 'est':
+            if rec.get('obra') == o:
+                est.append(login)
+    return eng, adm, est
+
+
 def main():
     raw = load_raw()
     obras, seen = [], set()
@@ -341,6 +358,7 @@ def main():
     attrs = firestore_get('caracteristicas') or {}
     config = firestore_get('config') or {}
     justs = firestore_get('justificativas') or {}
+    usuarios = firestore_get('usuarios') or {}
     estado = load_estado()
     estado.setdefault(CICLO, {})
 
@@ -363,11 +381,11 @@ def main():
             continue
         st = estado[CICLO].setdefault(o, {})
         st.setdefault('stage2', {})
-        emails = (attrs.get(o) or {}).get('emails') or {}
+        eng_r, adm_r, est_r = recipientes_obra(o, usuarios)
 
         # Etapa 1 (uma vez por obra, na 1a segunda) — todos os tipos juntos
         if HOJE >= pmonday and not st.get('stage1'):
-            dest = [emails.get('eng'), emails.get('adm'), emails.get('est'), fixos_ma] + monitor
+            dest = eng_r + adm_r + est_r + [fixos_ma] + monitor
             if enviar(f"[Painel Resíduos] {o} — alertas do mês ({CICLO})",
                       html_etapa1(o, etapa, tipos), dest):
                 st['stage1'] = datetime.datetime.now().isoformat(timespec='seconds')

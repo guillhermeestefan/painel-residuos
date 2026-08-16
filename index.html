@@ -200,11 +200,20 @@
 
   <div class="panel masteronly" style="margin-top:16px" id="secAcessos">
     <h3><span class="ttl">Acessos por obra — logins (Master)</span><button id="btSalvarAcessos" class="btn sm">Salvar na nuvem</button></h3>
-    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 10px">Cada obra tem 3 logins: <b>Engenheiro</b>, <b>Administrativo</b> e <b>Estagiário</b>. Só o login do <b>Engenheiro</b> pode registrar justificativa e plano de ação (da própria obra). Defina uma senha padrão e clique em <b>Gerar/atualizar</b> para criar os logins de todas as obras; ajuste as senhas se quiser e salve.</p>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 10px"><b>Administrativo</b> e <b>Estagiário</b>: um login por obra (clique em <b>Gerar/atualizar</b>). <b>Engenheiro</b>: adicione manualmente pelo e-mail e marque em quantas obras atua (pode ser mais de uma). Cada pessoa só enxerga as próprias obras; só o <b>Engenheiro</b> registra justificativa/plano. Os logins são os <b>e-mails</b> das pessoas — edite se precisar e clique em <b>Salvar na nuvem</b>.</p>
     <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
       <div><label class="lbl">Senha padrão para gerar</label><input id="acSenhaPad" class="inp" value="conx2016" style="width:180px"></div>
       <button id="btGerarAcessos" class="btn sm">Gerar/atualizar logins de todas as obras</button>
       <button id="btCopiarAcessos" class="btn sm" style="background:#8A8F98">Copiar lista</button>
+    </div>
+    <div style="border-top:1px solid var(--line);margin-top:4px;padding-top:12px;margin-bottom:12px">
+      <div class="lbl" style="margin-bottom:6px">Adicionar Engenheiro (e-mail + obras)</div>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+        <div><label class="lbl">E-mail (login)</label><input id="engEmail" class="inp" type="email" placeholder="engenheiro@empresa.com" style="width:250px"></div>
+        <div><label class="lbl">Senha</label><input id="engSenha" class="inp" value="conx2016" style="width:120px"></div>
+        <div><label class="lbl">Obras (segure Ctrl/Cmd p/ várias)</label><select id="engObras" class="inp" multiple size="4" style="min-width:240px"></select></div>
+        <button id="btAddEng" class="btn sm">Adicionar engenheiro</button>
+      </div>
     </div>
     <div id="acessosWrap" style="overflow:auto"></div>
   </div>
@@ -296,12 +305,14 @@ refreshFiltros();
 
 const OBRAS=uniq(RAW.map(r=>r.obra));
 let OBRAS_SEL=new Set(OBRAS);
+function obrasDoUsuario(){ if(MASTER_ON || !SESSION || SESSION.papel==='master') return OBRAS.slice(); if(SESSION.papel==='eng') return (SESSION.obras||(SESSION.obra?[SESSION.obra]:[])).filter(o=>OBRAS.includes(o)); if(SESSION.papel==='adm'||SESSION.papel==='est') return SESSION.obra?[SESSION.obra].filter(o=>OBRAS.includes(o)):[]; return OBRAS.slice(); }
+function aplicarEscopo(){ OBRAS_SEL=new Set(obrasDoUsuario()); if(typeof renderObraChecks==='function')renderObraChecks(); }
 function renderObraChecks(){
-  const c=document.getElementById('obraChecks');
-  c.innerHTML=OBRAS.length?OBRAS.map((o,i)=>`<label class="chk"><input type="checkbox" class="oChk" data-i="${i}" ${OBRAS_SEL.has(o)?'checked':''}> ${o}</label>`).join(''):'<span style="font-size:12px;color:var(--slate)">Sem obras.</span>';
-  c.querySelectorAll('.oChk').forEach(ch=>ch.addEventListener('change',()=>{const o=OBRAS[+ch.dataset.i];if(ch.checked)OBRAS_SEL.add(o);else OBRAS_SEL.delete(o);render();renderCmp();}));
+  const c=document.getElementById('obraChecks'); const vis=obrasDoUsuario();
+  c.innerHTML=vis.length?vis.map((o)=>`<label class="chk"><input type="checkbox" class="oChk" data-o="${o}" ${OBRAS_SEL.has(o)?'checked':''}> ${o}</label>`).join(''):'<span style="font-size:12px;color:var(--slate)">Sem obras.</span>';
+  c.querySelectorAll('.oChk').forEach(ch=>ch.addEventListener('change',()=>{const o=ch.dataset.o;if(ch.checked)OBRAS_SEL.add(o);else OBRAS_SEL.delete(o);render();renderCmp();}));
 }
-document.getElementById('oSelAll').onclick=()=>{OBRAS_SEL=new Set(OBRAS);renderObraChecks();render();renderCmp();};
+document.getElementById('oSelAll').onclick=()=>{OBRAS_SEL=new Set(obrasDoUsuario());renderObraChecks();render();renderCmp();};
 document.getElementById('oSelNone').onclick=()=>{OBRAS_SEL=new Set();renderObraChecks();render();renderCmp();};
 
 const RES_TIPOS=uniq(RAW.map(r=>r.residuoGrupo));
@@ -475,7 +486,7 @@ function progEmUso(c){ if(!c||!c.ativo) return false; const s=String(c.status||'
 function progConf(o,p){ const et=progEtapaAtual(o); if(!et) return 'sem_etapa'; if(!progAplicavel(p,et)) return 'na'; return progEmUso(progCell(o,p))?'conforme':'nao'; }
 function renderConf(){
   if(!document.getElementById('cConfObra')) return;
-  const obras=OBRAS;
+  const obras=obrasDoUsuario();
   const nObra=obras.map(()=>0), cObraArr=obras.map(()=>0), naoProg={};
   PROG_LISTA.forEach(p=>naoProg[p]=0);
   const M={};
@@ -504,8 +515,8 @@ function renderConf(){
 function saveProg(){ if(window._db&&window._auth&&window._auth.currentUser){ window._db.collection('painel').doc('programas').set({dados:PROG,atualizado:Date.now()}).catch(e=>console.warn('save prog',e)); } }
 function renderProgChart(){
   if(!document.getElementById('cProg')) return;
-  const tot=OBRAS.length||1;
-  const counts=PROG_LISTA.map(p=>OBRAS.filter(o=>progCell(o,p).ativo).length);
+  const _obs=obrasDoUsuario(); const tot=_obs.length||1;
+  const counts=PROG_LISTA.map(p=>_obs.filter(o=>progCell(o,p).ativo).length);
   if(charts['cProg'])charts['cProg'].destroy();
   charts['cProg']=new Chart(document.getElementById('cProg'),{type:'bar',data:{labels:PROG_LISTA,datasets:[{data:counts,backgroundColor:'#2E9E5B',borderRadius:5}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.raw} de ${tot} obras (${Math.round(ctx.raw/tot*100)}%)`}}},scales:{x:{beginAtZero:true,max:tot,ticks:{stepSize:1,precision:0}},y:{ticks:{font:{size:10}}}}}});
 }
@@ -526,7 +537,7 @@ document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&window._a
 renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){renderCarac();renderProgMatrix();renderAcessos();}}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -577,19 +588,14 @@ function renderCarac(){
         <div><label class="lbl">Estrutura</label><select class="inp aEstr" style="min-width:200px">${oe}</select></div>
         <div style="align-self:center;padding-top:14px"><label class="lbl" style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0"><input class="aConcl" type="checkbox" ${a.concluida?'checked':''}> <b>Obra concluída</b> (não notificar)</label></div>
       </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-        <div><label class="lbl">Eng. Responsável (e-mail)</label><input class="inp aEmEng" type="email" placeholder="engenheiro@conx.com.br" style="width:230px" value="${(a.emails&&a.emails.eng)||''}"></div>
-        <div><label class="lbl">Administrativo da obra (e-mail)</label><input class="inp aEmAdm" type="email" placeholder="adm@conx.com.br" style="width:230px" value="${(a.emails&&a.emails.adm)||''}"></div>
-        <div><label class="lbl">Estagiário (e-mail)</label><input class="inp aEmEst" type="email" placeholder="estagiario@conx.com.br" style="width:230px" value="${(a.emails&&a.emails.est)||''}"></div>
-      </div>
       <div class="lbl" style="margin-bottom:6px">Histórico de fases (etapa + data que entrou nela)</div>
       <div class="fasesList">${fr||'<span style="font-size:12px;color:var(--slate)">Nenhuma fase.</span>'}</div>
       <button class="btn sm addFase" style="margin-top:6px">+ Adicionar fase</button></div>`;
   }).join('');
   w.querySelectorAll('.ocard').forEach(card=>{
     const o=card.dataset.o;const ensure=()=>{ATTRS[o]=ATTRS[o]||{};ATTRS[o].fases=ATTRS[o].fases||[];};
-    const salvarBasico=()=>{ensure();ATTRS[o].area=+card.querySelector('.aArea').value||'';ATTRS[o].estrutura=card.querySelector('.aEstr').value;ATTRS[o].emails={eng:card.querySelector('.aEmEng').value.trim(),adm:card.querySelector('.aEmAdm').value.trim(),est:card.querySelector('.aEmEst').value.trim()};ATTRS[o].concluida=card.querySelector('.aConcl').checked;saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();};
-    card.querySelectorAll('.aArea,.aEstr,.aEmEng,.aEmAdm,.aEmEst,.aConcl').forEach(el=>el.addEventListener('change',salvarBasico));
+    const salvarBasico=()=>{ensure();ATTRS[o].area=+card.querySelector('.aArea').value||'';ATTRS[o].estrutura=card.querySelector('.aEstr').value;ATTRS[o].concluida=card.querySelector('.aConcl').checked;saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();};
+    card.querySelectorAll('.aArea,.aEstr,.aConcl').forEach(el=>el.addEventListener('change',salvarBasico));
     const salvarFases=()=>{ensure();ATTRS[o].fases=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
     card.querySelectorAll('.fEt,.fDt,.fDtF').forEach(el=>el.addEventListener('change',salvarFases));
     card.querySelectorAll('.fRm').forEach(b=>b.addEventListener('click',()=>{ensure();ATTRS[o].fases.splice(+b.closest('[data-i]').dataset.i,1);saveAttrs();recomputeEtapas();refreshFiltros();render();renderCarac();renderCmp();}));
@@ -620,12 +626,12 @@ function lockPanel(){ const s=document.getElementById('loginScreen'); if(s)s.sty
 function isAuthed(){ return !!(SESSION || (window._auth&&window._auth.currentUser)); }
 function updateSessionUI(){ const b=document.getElementById('loginBtn'); if(!b)return; const authed=isAuthed(); b.style.display=authed?'inline-block':'none'; const who=SESSION?SESSION.login:(window._auth&&window._auth.currentUser?window._auth.currentUser.email:''); b.textContent='Sair'+(who?' ('+who+')':''); const ts=document.getElementById('trocaSenhaBtn'); if(ts) ts.style.display=(SESSION&&PAPEIS[SESSION.papel])?'inline-block':'none'; }
 function trocarMinhaSenha(){ if(!(SESSION&&PAPEIS[SESSION.papel])){ alert('Faça login com seu usuário para trocar a senha.'); return; } const n=prompt('Nova senha para '+SESSION.login+':'); if(n===null)return; const nn=n.trim(); if(nn.length<4){ alert('Use pelo menos 4 caracteres.'); return; } const c=prompt('Confirme a nova senha:'); if(c===null)return; if(c.trim()!==nn){ alert('As senhas não conferem.'); return; } if(!window._db){ alert('Sem conexão com a nuvem.'); return; } USUARIOS[SESSION.login]=USUARIOS[SESSION.login]||{papel:SESSION.papel,obra:SESSION.obra}; USUARIOS[SESSION.login].senha=nn; window._db.collection('painel').doc('usuarios').set({dados:USUARIOS,atualizado:Date.now()}).then(()=>alert('Senha alterada com sucesso!')).catch(e=>alert('Erro ao salvar: '+e.message)); }
-function logoutAll(){ try{ if(window._auth&&window._auth.currentUser) window._auth.signOut(); }catch(e){} SESSION=null; try{sessionStorage.removeItem('equipe');sessionStorage.removeItem('master');}catch(e){} setMaster(false); updateSessionUI(); lockPanel(); const u=document.getElementById('lgUser'),p=document.getElementById('lgPass'); if(u)u.value=''; if(p)p.value=''; }
+function logoutAll(){ try{ if(window._auth&&window._auth.currentUser) window._auth.signOut(); }catch(e){} SESSION=null; try{sessionStorage.removeItem('equipe');sessionStorage.removeItem('master');}catch(e){} setMaster(false); OBRAS_SEL=new Set(OBRAS); updateSessionUI(); lockPanel(); const u=document.getElementById('lgUser'),p=document.getElementById('lgPass'); if(u)u.value=''; if(p)p.value=''; }
 function lgErro(m){ const e=document.getElementById('lgErro'); if(e){ e.textContent=m||''; e.style.display=m?'block':'none'; } }
 function loginScreenSubmit(){ const u=(document.getElementById('lgUser').value||'').trim(); const p=document.getElementById('lgPass').value||''; if(!u||!p){ lgErro('Preencha usuário e senha.'); return; } lgErro('');
   const rec=USUARIOS[u];
   if(rec){
-    if(String(rec.senha)===String(p)){ SESSION={login:u,papel:rec.papel,obra:rec.obra}; try{sessionStorage.setItem('equipe',JSON.stringify(SESSION));}catch(e){} openPanel(); updateSessionUI(); renderJust(); }
+    if(String(rec.senha)===String(p)){ SESSION={login:u,papel:rec.papel,obra:rec.obra,obras:rec.obras||(rec.obra?[rec.obra]:undefined)}; try{sessionStorage.setItem('equipe',JSON.stringify(SESSION));}catch(e){} openPanel(); updateSessionUI(); aplicarEscopo(); render(); renderCmp(); renderJust(); }
     else { lgErro('Usuário ou senha inválidos.'); }
     return;
   }
@@ -642,16 +648,17 @@ function loginScreenSubmit(){ const u=(document.getElementById('lgUser').value||
   updateSessionUI();
 })();
 
-function renderAcessos(){ const w=document.getElementById('acessosWrap'); if(!w) return; const logins=Object.keys(USUARIOS).sort((a,b)=>(USUARIOS[a].obra||'').localeCompare(USUARIOS[b].obra||'')||a.localeCompare(b)); if(!logins.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Nenhum login ainda. Clique em “Gerar/atualizar”.</p>'; return; } let h='<table style="border-collapse:collapse;font-size:12px;min-width:680px"><thead><tr><th style="text-align:left;padding:6px">Login (editável)</th><th style="text-align:left;padding:6px">Papel</th><th style="text-align:left;padding:6px">Obra</th><th style="text-align:left;padding:6px">Senha</th><th></th></tr></thead><tbody>'; logins.forEach(l=>{ const r=USUARIOS[l]; h+='<tr data-l="'+l+'"><td style="padding:6px"><input class="inp acLogin" value="'+l+'" style="width:180px;padding:4px 8px;font-family:monospace"></td><td style="padding:6px">'+(PAPEIS[r.papel]||r.papel)+'</td><td style="padding:6px">'+r.obra+'</td><td style="padding:6px"><input class="inp acSenha" value="'+(r.senha||'')+'" style="width:140px;padding:4px 8px"></td><td style="padding:6px"><button class="btn sm acRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></td></tr>'; }); h+='</tbody></table>'; w.innerHTML=h; w.querySelectorAll('tr[data-l]').forEach(tr=>{ const l=tr.dataset.l; tr.querySelector('.acSenha').addEventListener('change',e=>{ if(USUARIOS[l]) USUARIOS[l].senha=e.target.value.trim(); }); tr.querySelector('.acLogin').addEventListener('change',e=>{ const novo=e.target.value.trim(); if(!novo){ e.target.value=l; return; } if(novo===l) return; if(USUARIOS[novo]){ alert('Já existe um login chamado "'+novo+'". Escolha outro.'); e.target.value=l; return; } USUARIOS[novo]=USUARIOS[l]; delete USUARIOS[l]; renderAcessos(); }); tr.querySelector('.acRm').addEventListener('click',()=>{ if(confirm('Remover o login "'+l+'"?')){ delete USUARIOS[l]; renderAcessos(); } }); }); }
-(function(){ const g=document.getElementById('btGerarAcessos'); if(g) g.onclick=()=>{ const sp=(document.getElementById('acSenhaPad').value||'conx2016').trim()||'conx2016'; OBRAS.forEach(o=>{ Object.keys(PAPEIS).forEach(pk=>{ const login=pk+'.'+slug(o); if(!USUARIOS[login]) USUARIOS[login]={senha:sp,papel:pk,obra:o}; }); }); renderAcessos(); };
+function renderAcessos(){ const w=document.getElementById('acessosWrap'); if(!w) return; const eo=document.getElementById('engObras'); if(eo){ eo.innerHTML=OBRAS.map(o=>'<option>'+o+'</option>').join(''); } const logins=Object.keys(USUARIOS).sort((a,b)=>(USUARIOS[a].papel||'').localeCompare(USUARIOS[b].papel||'')||a.localeCompare(b)); if(!logins.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Nenhum login ainda. Gere os de Administrativo/Estagiário e adicione os Engenheiros acima.</p>'; return; } let h='<table style="border-collapse:collapse;font-size:12px;min-width:720px"><thead><tr><th style="text-align:left;padding:6px">Login (e-mail)</th><th style="text-align:left;padding:6px">Papel</th><th style="text-align:left;padding:6px">Obra(s)</th><th style="text-align:left;padding:6px">Senha</th><th></th></tr></thead><tbody>'; logins.forEach(l=>{ const r=USUARIOS[l]; let obraCell; if(r.papel==='eng'){ const sel=new Set(r.obras||(r.obra?[r.obra]:[])); obraCell='<select class="inp acObras" multiple size="3" style="min-width:200px">'+OBRAS.map(o=>'<option '+(sel.has(o)?'selected':'')+'>'+o+'</option>').join('')+'</select>'; } else { obraCell='<span>'+(r.obra||'')+'</span>'; } h+='<tr data-l="'+l+'"><td style="padding:6px"><input class="inp acLogin" value="'+l+'" style="width:210px;padding:4px 8px;font-family:monospace"></td><td style="padding:6px">'+(PAPEIS[r.papel]||r.papel)+'</td><td style="padding:6px">'+obraCell+'</td><td style="padding:6px"><input class="inp acSenha" value="'+(r.senha||'')+'" style="width:130px;padding:4px 8px"></td><td style="padding:6px"><button class="btn sm acRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></td></tr>'; }); h+='</tbody></table>'; w.innerHTML=h; w.querySelectorAll('tr[data-l]').forEach(tr=>{ const l=tr.dataset.l; tr.querySelector('.acSenha').addEventListener('change',e=>{ if(USUARIOS[l]) USUARIOS[l].senha=e.target.value.trim(); }); tr.querySelector('.acLogin').addEventListener('change',e=>{ const novo=e.target.value.trim(); if(!novo){ e.target.value=l; return; } if(novo===l) return; if(USUARIOS[novo]){ alert('Já existe um login chamado "'+novo+'". Escolha outro.'); e.target.value=l; return; } USUARIOS[novo]=USUARIOS[l]; delete USUARIOS[l]; renderAcessos(); }); const os=tr.querySelector('.acObras'); if(os) os.addEventListener('change',e=>{ if(USUARIOS[l]) USUARIOS[l].obras=[...e.target.selectedOptions].map(op=>op.value); }); tr.querySelector('.acRm').addEventListener('click',()=>{ if(confirm('Remover o login "'+l+'"?')){ delete USUARIOS[l]; renderAcessos(); } }); }); }
+(function(){ const g=document.getElementById('btGerarAcessos'); if(g) g.onclick=()=>{ const sp=(document.getElementById('acSenhaPad').value||'conx2016').trim()||'conx2016'; OBRAS.forEach(o=>{ ['adm','est'].forEach(pk=>{ const login=pk+'.'+slug(o); if(!USUARIOS[login]) USUARIOS[login]={senha:sp,papel:pk,obra:o}; }); }); renderAcessos(); };
+  const ae=document.getElementById('btAddEng'); if(ae) ae.onclick=()=>{ const em=(document.getElementById('engEmail').value||'').trim().toLowerCase(); const sn=(document.getElementById('engSenha').value||'conx2016').trim()||'conx2016'; const obras=[...document.getElementById('engObras').selectedOptions].map(o=>o.value); if(!em||!em.includes('@')){ alert('Informe o e-mail do engenheiro.'); return; } if(!obras.length){ alert('Selecione ao menos uma obra.'); return; } USUARIOS[em]={senha:(USUARIOS[em]?USUARIOS[em].senha:sn),papel:'eng',obras:obras}; document.getElementById('engEmail').value=''; renderAcessos(); alert('Engenheiro adicionado: '+em+' — '+obras.length+' obra(s). Não esqueça de Salvar na nuvem.'); };
   const sv=document.getElementById('btSalvarAcessos'); if(sv) sv.onclick=()=>{ if(!(window._db&&window._auth&&window._auth.currentUser)){ alert('Entre como Master antes de salvar.'); return; } sv.textContent='Salvando...'; window._db.collection('painel').doc('usuarios').set({dados:USUARIOS,atualizado:Date.now()}).then(()=>{ alert('Acessos salvos na nuvem!'); sv.textContent='Salvar na nuvem'; }).catch(e=>{ alert('Erro: '+e.message); sv.textContent='Salvar na nuvem'; }); };
   const cp=document.getElementById('btCopiarAcessos'); if(cp) cp.onclick=async ()=>{ const linhas=Object.keys(USUARIOS).sort((a,b)=>(USUARIOS[a].obra||'').localeCompare(USUARIOS[b].obra||'')).map(l=>USUARIOS[l].obra+' | '+(PAPEIS[USUARIOS[l].papel]||USUARIOS[l].papel)+' | login: '+l+' | senha: '+USUARIOS[l].senha); try{ await navigator.clipboard.writeText(linhas.join('\n')); alert('Lista copiada!'); }catch(e){ alert('Não foi possível copiar. '+e.message); } }; })();
 
 /* ===== Justificativas por tipo (só Engenheiro Responsável edita) ===== */
 function alertasTipos(o,vol){ const atraso=[]; PROG_LISTA.forEach(p=>{ if(progConf(o,p)==='nao') atraso.push('Atraso na utilização do programa: '+p); }); const custo=[]; const st=statusCusto(o,vol[o]||0); if(st==='vermelho') custo.push('Sinal vermelho de geração de resíduos (realizado passou do orçado)'); else if(st==='amarelo') custo.push('Sinal amarelo de geração de resíduos (atingiu o limite da fase atual)'); return {atraso,custo}; }
 function renderJust(){ const w=document.getElementById('justWrap'); if(!w) return; if(w.contains(document.activeElement)) return; const cyc=cicloAtual(); const vol=volConstrutivoAll();
-  const cards=[]; OBRAS.forEach(o=>{ if((ATTRS[o]||{}).concluida) return; const at=alertasTipos(o,vol); if(!at.atraso.length && !at.custo.length) return;
-    const podeEditar = SESSION && SESSION.papel==='eng' && SESSION.obra===o;
+  const cards=[]; obrasDoUsuario().forEach(o=>{ if((ATTRS[o]||{}).concluida) return; const at=alertasTipos(o,vol); if(!at.atraso.length && !at.custo.length) return;
+    const podeEditar = SESSION && SESSION.papel==='eng' && (SESSION.obras||(SESSION.obra?[SESSION.obra]:[])).includes(o);
     let blocos=''; TIPOS.forEach(t=>{ const itens=at[t.k]; if(!itens.length) return; const j=(((JUST[o]||{})[cyc])||{})[t.k]||{}; const ok=j.justificativa&&j.plano;
       const status = ok?'<span style="background:#E6F4EA;color:#217a45;padding:1px 8px;border-radius:4px;font-size:11px">respondida ✓</span>':'<span style="background:#F7D9D5;color:#C0463B;padding:1px 8px;border-radius:4px;font-size:11px">aguardando</span>';
       const lista='<ul style="margin:4px 0 8px 18px;color:#C0463B;font-size:13px">'+itens.map(a=>'<li>'+a+'</li>').join('')+'</ul>';
