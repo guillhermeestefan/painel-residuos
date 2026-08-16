@@ -332,6 +332,8 @@ def recipientes_obra(o, usuarios):
     """E-mails (logins) por papel para a obra: eng pode ter varias obras (rec['obras'])."""
     eng, adm, est = [], [], []
     for login, rec in (usuarios or {}).items():
+        if (rec or {}).get('ativo') is False:
+            continue
         papel = (rec or {}).get('papel')
         if papel == 'eng':
             if o in ((rec.get('obras')) or ([rec['obra']] if rec.get('obra') else [])):
