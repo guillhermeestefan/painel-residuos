@@ -66,6 +66,10 @@
   .foot b{color:var(--ink)}
   .ocard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
   @media(max-width:1050px){.kpis{grid-template-columns:repeat(3,1fr)}.grid,.grid.three{grid-template-columns:1fr}}
+.tabbar{display:flex;gap:4px;flex-wrap:wrap;border-bottom:3px solid var(--orange);margin:0 0 18px}
+  .tabbtn{background:none;border:none;padding:10px 16px;font-size:13.5px;font-weight:600;color:var(--slate);cursor:pointer;border-radius:8px 8px 0 0;border:1px solid transparent;border-bottom:none;margin-bottom:-1px}
+  .tabbtn:hover{background:var(--cream)}
+  .tabbtn.active{color:var(--orange);background:var(--cream);border-color:var(--cream-bd)}
 </style>
 </head>
 <body>
@@ -94,6 +98,14 @@
   </div>
   <div class="wrap">
 
+  <div class="tabbar" id="tabbar">
+    <button class="tabbtn active" data-go="painel">Indicadores</button>
+    <button class="tabbtn" data-go="just">Justificativas</button>
+    <button class="tabbtn masteronly-tab" data-go="carac" style="display:none">Características das obras</button>
+    <button class="tabbtn masteronly-tab" data-go="prog" style="display:none">Controle de Programas</button>
+    <button class="tabbtn masteronly-tab" data-go="users" style="display:none">Usuários</button>
+  </div>
+  <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
     <div><label class="lbl">Etapa</label><select id="fEtapa"></select></div>
     <div><label class="lbl">Período</label><select id="fPeriodo">
@@ -180,32 +192,34 @@
     <div class="tbl-wrap"><table id="tblCmp"></table></div>
   </div>
 
-  <div class="panel" style="margin-top:16px" id="secJust">
+  </div>
+
+  <div class="panel tabpane" data-tab="just" style="margin-top:16px" id="secJust">
     <h3><span class="ttl">Justificativas e plano de ação</span></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Obras com alerta no mês atual (sinal amarelo/vermelho de geração ou atraso de programa). O <b>Engenheiro Responsável</b> preenche a justificativa e o plano de ação — só depois disso a <b>Gerência de Qualidade</b> é notificada. Não precisa de senha.</p>
     <div id="justWrap"></div>
   </div>
 
-  <div class="panel masteronly" style="margin-top:16px" id="secCarac">
+  <div class="panel tabpane" data-tab="carac" style="margin-top:16px" id="secCarac">
     <h3><span class="ttl">Características das obras (Master)</span><span style="display:flex;gap:8px"><button id="btSalvarNuvem" class="btn sm">Salvar na nuvem</button><button id="btBaixarCarac" class="btn sm" style="background:#8A8F98">Baixar backup</button></span></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Defina área construída, estrutura e o <b>histórico de fases</b> (etapa + data que entrou). As mudanças são salvas na nuvem e <b>todos que abrirem o link veem igual</b>. Se preencheu antes de entrar como Master, clique em <b>Salvar na nuvem</b> uma vez para publicar tudo.</p>
     <div id="caracWrap"></div>
   </div>
 
-  <div class="panel masteronly" style="margin-top:16px" id="secProg">
+  <div class="panel tabpane" data-tab="prog" style="margin-top:16px" id="secProg">
     <h3><span class="ttl">Controle de Programas (Master)</span><button id="btSalvarProg" class="btn sm">Salvar na nuvem</button></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Para cada obra e programa: marque se está <b>ativo</b> e escreva o status. Salvo na nuvem e visível para todos. Já preenchido a partir da sua planilha — ajuste o que precisar.</p>
     <div id="progWrap"></div>
   </div>
 
-  <div class="panel masteronly" style="margin-top:16px" id="secAcessos">
+  <div class="panel tabpane" data-tab="users" style="margin-top:16px" id="secAcessos">
     <h3><span class="ttl">Usuários (Master)</span><button id="btNovoUsuario" class="btn">+ Novo usuário</button></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 10px">Fazem login e recebem as notificações. <b>Engenheiro</b>: registra justificativa/plano e pode atuar em várias obras. <b>Administrativo</b> e <b>Estagiário</b>: uma obra cada. Cada pessoa só enxerga as próprias obras. O login é o e-mail.</p>
     <div id="userForm" style="display:none;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px;background:#FAFBFC">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
         <div><label class="lbl">Nome</label><input id="uNome" class="inp" style="width:190px"></div>
         <div><label class="lbl">E-mail (login)</label><input id="uEmail" class="inp" type="email" style="width:230px"></div>
-        <div><label class="lbl">Perfil</label><select id="uPapel" class="inp"><option value="master">Master</option><option value="eng">Engenheiro</option><option value="adm">Administrativo</option><option value="est">Estagiário</option><option value="gerente_q">Gerente de Qualidade</option><option value="coord_q">Coordenador de Qualidade</option><option value="gestor_ma">Gestor de Meio Ambiente</option><option value="consultor">Consultor Técnico de Obra</option><option value="dir_obra">Diretor de Construção</option><option value="dir_eng">Diretor de Engenharia</option></select></div>
+        <div><label class="lbl">Perfil</label><select id="uPapel" class="inp"><option value="master">Master</option><option value="eng">Engenheiro</option><option value="adm">Administrativo</option><option value="est">Estagiário</option><option value="analista_q">Analista de Qualidade</option><option value="gerente_q">Gerente de Qualidade</option><option value="coord_q">Coordenador de Qualidade</option><option value="gestor_ma">Gestor de Meio Ambiente</option><option value="consultor">Consultor Técnico de Obra</option><option value="dir_obra">Diretor de Construção</option><option value="dir_eng">Diretor de Engenharia</option></select></div>
         <div><label class="lbl">Senha</label><input id="uSenha" class="inp" value="conx2016" style="width:120px"></div>
         <div><label class="lbl">Situação</label><select id="uAtivo" class="inp"><option value="1">Ativo</option><option value="0">Inativo</option></select></div>
       </div>
@@ -221,7 +235,7 @@
     </div>
   </div>
 
-  <div class="panel masteronly" style="margin-top:16px" id="secAddObra">
+  <div class="panel tabpane" data-tab="carac" style="margin-top:16px" id="secAddObra">
     <h3><span class="ttl">Adicionar obra nova (Master)</span></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 14px">Cadastre, clique em <b>Baixar novas_obras.csv</b> e suba no repositório. Na próxima atualização entram.</p>
     <div style="display:grid;grid-template-columns:1.4fr 1fr .9fr .7fr auto;gap:10px;align-items:end">
@@ -274,8 +288,8 @@ if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:
 let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
 let MASTER_ON=false;
-let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; const PAPEIS={master:'Master',eng:'Engenheiro',adm:'Administrativo',est:'Estagiário',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
-function ehMaster(pp){ return pp==='master'||pp==='gerente_q'||pp==='coord_q'||pp==='gestor_ma'; }
+let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; const PAPEIS={master:'Master',eng:'Engenheiro',adm:'Administrativo',est:'Estagiário',analista_q:'Analista de Qualidade',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
+function ehMaster(pp){ return pp==='master'||pp==='gerente_q'||pp==='coord_q'||pp==='gestor_ma'||pp==='analista_q'; }
 function podeSalvarNuvem(){ return (window._auth&&window._auth.currentUser) || (SESSION&&ehMaster(SESSION.papel)); } const TIPOS=[{k:'atraso',nome:'Atraso de programa'},{k:'custo',nome:'Sinal de custo (amarelo/vermelho)'}];
 function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){} if(window._db&&podeSalvarNuvem()){window._db.collection('painel').doc('caracteristicas').set({dados:ATTRS,atualizado:Date.now()}).catch(e=>console.warn('firestore save',e));}}
 
@@ -300,7 +314,7 @@ refreshFiltros();
 
 const OBRAS=uniq(RAW.map(r=>r.obra));
 let OBRAS_SEL=new Set(OBRAS);
-function obrasDoUsuario(){ if(MASTER_ON || !SESSION || SESSION.papel==='master') return OBRAS.slice(); if(SESSION.papel==='eng') return (SESSION.obras||(SESSION.obra?[SESSION.obra]:[])).filter(o=>OBRAS.includes(o)); if(SESSION.papel==='adm'||SESSION.papel==='est') return SESSION.obra?[SESSION.obra].filter(o=>OBRAS.includes(o)):[]; return OBRAS.slice(); }
+function obrasDoUsuario(){ if(SESSION && (SESSION.papel==='eng'||SESSION.papel==='analista_q')) return (SESSION.obras||(SESSION.obra?[SESSION.obra]:[])).filter(o=>OBRAS.includes(o)); if(SESSION && (SESSION.papel==='adm'||SESSION.papel==='est')) return SESSION.obra?[SESSION.obra].filter(o=>OBRAS.includes(o)):[]; if(MASTER_ON || !SESSION || SESSION.papel==='master') return OBRAS.slice(); return OBRAS.slice(); }
 function aplicarEscopo(){ OBRAS_SEL=new Set(obrasDoUsuario()); if(typeof renderObraChecks==='function')renderObraChecks(); }
 function renderObraChecks(){
   const c=document.getElementById('obraChecks'); const vis=obrasDoUsuario();
@@ -519,7 +533,7 @@ function renderProgMatrix(){
   const w=document.getElementById('progWrap'); if(!w) return;
   if(!OBRAS.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem obras.</p>'; return; }
   let html='<div style="overflow:auto"><table style="min-width:1000px"><thead><tr><th style="position:sticky;left:0;background:#FAFBFC">Obra</th>'+PROG_LISTA.map(p=>`<th style="text-align:center">${p}</th>`).join('')+'</tr></thead><tbody>';
-  OBRAS.forEach(o=>{ html+='<tr><td style="font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff">'+o+'</td>';
+  obrasDoUsuario().forEach(o=>{ html+='<tr><td style="font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff">'+o+'</td>';
     PROG_LISTA.forEach(p=>{ const c=progCell(o,p); html+=`<td data-o="${o}" data-p="${p}" style="min-width:150px;vertical-align:top"><label class="chk" style="margin-bottom:4px"><input type="checkbox" class="pgAtivo" ${c.ativo?'checked':''}> ativo</label><input class="inp pgStatus" style="width:100%" placeholder="status" value="${String(c.status||'').replace(/"/g,'&quot;')}"></td>`; });
     html+='</tr>'; });
   html+='</tbody></table></div>';
@@ -532,7 +546,7 @@ document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&podeSalva
 renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly').forEach(el=>el.style.display=on?'block':'none');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -572,7 +586,7 @@ document.getElementById('masterBtn').onclick=async ()=>{
 
 /* ===== Características (Master) ===== */
 function renderCarac(){
-  const w=document.getElementById('caracWrap');const obras=OBRAS;
+  const w=document.getElementById('caracWrap');const obras=obrasDoUsuario();
   if(!obras.length){w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem obras.</p>';return;}
   w.innerHTML=obras.map(o=>{const a=ATTRS[o]||{};const fases=a.fases||[];
     const oe=ESTRUTURAS.map(e=>`<option value="${e}" ${e===(a.estrutura||'')?'selected':''}>${e||'(a definir)'}</option>`).join('');
@@ -645,13 +659,13 @@ function loginScreenSubmit(){ const u=(document.getElementById('lgUser').value||
   updateSessionUI();
 })();
 
-function renderAcessos(){ const w=document.getElementById('acessosWrap'); if(!w) return; const logins=Object.keys(USUARIOS).sort((a,b)=>((USUARIOS[a].nome||a).toLowerCase()).localeCompare((USUARIOS[b].nome||b).toLowerCase())); if(!logins.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Nenhum usuário ainda. Clique em "+ Novo usuário".</p>'; return; } const BADGE={master:['#FFF4EA','#9A4A0F','Master'],eng:['#FAEEDA','#854F0B','Engenheiro'],adm:['#E6F1FB','#0C447C','Administrativo'],est:['#EEEDFE','#3C3489','Estagiário'],gerente_q:['#E1F5EE','#0F6E56','Gerente de Qualidade'],coord_q:['#EAF3DE','#3B6D11','Coordenador de Qualidade'],gestor_ma:['#EAF3DE','#27500A','Gestor de Meio Ambiente'],consultor:['#F1EFE8','#5F5E5A','Consultor Técnico'],dir_obra:['#FAECE7','#993C1D','Diretor de Construção'],dir_eng:['#FBEAF0','#993556','Diretor de Engenharia']}; const badge=pk=>{const b=BADGE[pk]||['#eee','#333',pk];return '<span style="background:'+b[0]+';color:'+b[1]+';padding:3px 10px;border-radius:12px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px">'+b[2]+'</span>';}; const sit=a=>a===false?'<span style="color:#8A8F98;font-size:11.5px;font-weight:600">● Inativo</span>':'<span style="color:#217a45;font-size:11.5px;font-weight:600">● Ativo</span>'; let h='<table style="border-collapse:collapse;width:100%;font-size:12.5px"><thead><tr style="color:var(--slate)"><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.3px">Nome</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Login</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Perfil</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Obra(s)</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Situação</th><th></th></tr></thead><tbody>'; logins.forEach(l=>{ const r=USUARIOS[l]; const obras=r.papel==='eng'?((r.obras||(r.obra?[r.obra]:[])).join(', ')):((r.papel==='adm'||r.papel==='est')?(r.obra||'—'):'Todas as obras'); h+='<tr data-l="'+l+'" style="border-top:1px solid var(--line)"><td style="padding:10px 6px;font-weight:600">'+(r.nome||'—')+'</td><td style="padding:10px 6px;color:#555">'+l+'</td><td style="padding:10px 6px">'+badge(r.papel)+'</td><td style="padding:10px 6px;color:#555;max-width:280px">'+obras+'</td><td style="padding:10px 6px">'+sit(r.ativo)+'</td><td style="padding:10px 6px;white-space:nowrap;text-align:right"><button class="btn sm acEdit" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd)">editar</button> <button class="btn sm acRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></td></tr>'; }); h+='</tbody></table>'; w.innerHTML=h; w.querySelectorAll('tr[data-l]').forEach(tr=>{ const l=tr.dataset.l; tr.querySelector('.acEdit').onclick=()=>abrirFormUsuario(l); tr.querySelector('.acRm').onclick=()=>{ if(confirm('Remover o usuário "'+l+'"?')){ delete USUARIOS[l]; renderAcessos(); } }; }); }
+function renderAcessos(){ const w=document.getElementById('acessosWrap'); if(!w) return; const logins=Object.keys(USUARIOS).sort((a,b)=>((USUARIOS[a].nome||a).toLowerCase()).localeCompare((USUARIOS[b].nome||b).toLowerCase())); if(!logins.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Nenhum usuário ainda. Clique em "+ Novo usuário".</p>'; return; } const BADGE={master:['#FFF4EA','#9A4A0F','Master'],eng:['#FAEEDA','#854F0B','Engenheiro'],adm:['#E6F1FB','#0C447C','Administrativo'],est:['#EEEDFE','#3C3489','Estagiário'],analista_q:['#E1F5EE','#0F6E56','Analista de Qualidade'],gerente_q:['#E1F5EE','#0F6E56','Gerente de Qualidade'],coord_q:['#EAF3DE','#3B6D11','Coordenador de Qualidade'],gestor_ma:['#EAF3DE','#27500A','Gestor de Meio Ambiente'],consultor:['#F1EFE8','#5F5E5A','Consultor Técnico'],dir_obra:['#FAECE7','#993C1D','Diretor de Construção'],dir_eng:['#FBEAF0','#993556','Diretor de Engenharia']}; const badge=pk=>{const b=BADGE[pk]||['#eee','#333',pk];return '<span style="background:'+b[0]+';color:'+b[1]+';padding:3px 10px;border-radius:12px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px">'+b[2]+'</span>';}; const sit=a=>a===false?'<span style="color:#8A8F98;font-size:11.5px;font-weight:600">● Inativo</span>':'<span style="color:#217a45;font-size:11.5px;font-weight:600">● Ativo</span>'; let h='<table style="border-collapse:collapse;width:100%;font-size:12.5px"><thead><tr style="color:var(--slate)"><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.3px">Nome</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Login</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Perfil</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Obra(s)</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Situação</th><th></th></tr></thead><tbody>'; logins.forEach(l=>{ const r=USUARIOS[l]; const obras=(r.papel==='eng'||r.papel==='analista_q')?((r.obras||(r.obra?[r.obra]:[])).join(', ')):((r.papel==='adm'||r.papel==='est')?(r.obra||'—'):'Todas as obras'); h+='<tr data-l="'+l+'" style="border-top:1px solid var(--line)"><td style="padding:10px 6px;font-weight:600">'+(r.nome||'—')+'</td><td style="padding:10px 6px;color:#555">'+l+'</td><td style="padding:10px 6px">'+badge(r.papel)+'</td><td style="padding:10px 6px;color:#555;max-width:280px">'+obras+'</td><td style="padding:10px 6px">'+sit(r.ativo)+'</td><td style="padding:10px 6px;white-space:nowrap;text-align:right"><button class="btn sm acEdit" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd)">editar</button> <button class="btn sm acRm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></td></tr>'; }); h+='</tbody></table>'; w.innerHTML=h; w.querySelectorAll('tr[data-l]').forEach(tr=>{ const l=tr.dataset.l; tr.querySelector('.acEdit').onclick=()=>abrirFormUsuario(l); tr.querySelector('.acRm').onclick=()=>{ if(confirm('Remover o usuário "'+l+'"?')){ delete USUARIOS[l]; renderAcessos(); } }; }); }
 function popObrasForm(){ const el=document.getElementById('uObras'); if(el) el.innerHTML=OBRAS.map(o=>'<option>'+o+'</option>').join(''); }
-function ajustarObrasUI(){ const el=document.getElementById('uObras'),lbl=document.getElementById('uObrasLbl'); if(!el)return; const p=document.getElementById('uPapel').value; const wrap=el.parentElement; if(p==='eng'){ el.multiple=true; lbl.textContent='Obras (segure Ctrl/Cmd para várias)'; if(wrap)wrap.style.display=''; } else if(p==='adm'||p==='est'){ el.multiple=false; lbl.textContent='Obra'; if(wrap)wrap.style.display=''; } else { if(wrap)wrap.style.display='none'; } }
+function ajustarObrasUI(){ const el=document.getElementById('uObras'),lbl=document.getElementById('uObrasLbl'); if(!el)return; const p=document.getElementById('uPapel').value; const wrap=el.parentElement; if(p==='eng'||p==='analista_q'){ el.multiple=true; lbl.textContent='Obras (segure Ctrl/Cmd para várias)'; if(wrap)wrap.style.display=''; } else if(p==='adm'||p==='est'){ el.multiple=false; lbl.textContent='Obra'; if(wrap)wrap.style.display=''; } else { if(wrap)wrap.style.display='none'; } }
 let editandoLogin=null;
 function abrirFormUsuario(login){ popObrasForm(); editandoLogin=login||null; const r=login?USUARIOS[login]:null; document.getElementById('uNome').value=r?(r.nome||''):''; document.getElementById('uEmail').value=login||''; document.getElementById('uPapel').value=r?r.papel:'eng'; document.getElementById('uSenha').value=r?(r.senha||'conx2016'):'conx2016'; document.getElementById('uAtivo').value=(r&&r.ativo===false)?'0':'1'; ajustarObrasUI(); const sel=new Set(r?(r.obras||(r.obra?[r.obra]:[])):[]); [...document.getElementById('uObras').options].forEach(op=>op.selected=sel.has(op.value)); document.getElementById('uEditInfo').textContent=login?('Editando '+login):''; document.getElementById('userForm').style.display='block'; }
 function fecharFormUsuario(){ document.getElementById('userForm').style.display='none'; editandoLogin=null; }
-function salvarUsuario(){ const nome=document.getElementById('uNome').value.trim(); const email=document.getElementById('uEmail').value.trim().toLowerCase(); const papel=document.getElementById('uPapel').value; const senha=document.getElementById('uSenha').value.trim()||'conx2016'; const ativo=document.getElementById('uAtivo').value==='1'; const obras=[...document.getElementById('uObras').selectedOptions].map(o=>o.value); const gestao=!['eng','adm','est'].includes(papel); if(!email||!email.includes('@')){ alert('Informe o e-mail (login).'); return; } if(!gestao && !obras.length){ alert('Selecione a(s) obra(s).'); return; } const rec={nome:nome,senha:senha,papel:papel,ativo:ativo}; if(papel==='eng')rec.obras=obras; else if(papel==='adm'||papel==='est')rec.obra=obras[0]; if(editandoLogin&&editandoLogin!==email){ delete USUARIOS[editandoLogin]; } else if(!editandoLogin&&USUARIOS[email]){ if(!confirm('Já existe um usuário com esse e-mail. Substituir?'))return; } USUARIOS[email]=rec; fecharFormUsuario(); renderAcessos(); }
+function salvarUsuario(){ const nome=document.getElementById('uNome').value.trim(); const email=document.getElementById('uEmail').value.trim().toLowerCase(); const papel=document.getElementById('uPapel').value; const senha=document.getElementById('uSenha').value.trim()||'conx2016'; const ativo=document.getElementById('uAtivo').value==='1'; const obras=[...document.getElementById('uObras').selectedOptions].map(o=>o.value); const gestao=!['eng','adm','est','analista_q'].includes(papel); if(!email||!email.includes('@')){ alert('Informe o e-mail (login).'); return; } if(!gestao && !obras.length){ alert('Selecione a(s) obra(s).'); return; } const rec={nome:nome,senha:senha,papel:papel,ativo:ativo}; if(papel==='eng'||papel==='analista_q')rec.obras=obras; else if(papel==='adm'||papel==='est')rec.obra=obras[0]; if(editandoLogin&&editandoLogin!==email){ delete USUARIOS[editandoLogin]; } else if(!editandoLogin&&USUARIOS[email]){ if(!confirm('Já existe um usuário com esse e-mail. Substituir?'))return; } USUARIOS[email]=rec; fecharFormUsuario(); renderAcessos(); }
 (function(){ const nb=document.getElementById('btNovoUsuario'); if(nb) nb.onclick=()=>abrirFormUsuario(null); const su=document.getElementById('btSalvarUsuario'); if(su) su.onclick=salvarUsuario; const cu=document.getElementById('btCancelarUsuario'); if(cu) cu.onclick=fecharFormUsuario; const up=document.getElementById('uPapel'); if(up) up.onchange=ajustarObrasUI;
   const g=document.getElementById('btGerarAcessos'); if(g) g.onclick=()=>{ OBRAS.forEach(o=>{ ['adm','est'].forEach(pk=>{ const login=pk+'.'+slug(o); if(!USUARIOS[login]) USUARIOS[login]={senha:'conx2016',papel:pk,obra:o,ativo:true}; }); }); renderAcessos(); };
   const sv=document.getElementById('btSalvarAcessos'); if(sv) sv.onclick=()=>{ if(!(window._db&&podeSalvarNuvem())){ alert('Entre como Master antes de salvar.'); return; } sv.textContent='Salvando...'; window._db.collection('painel').doc('usuarios').set({dados:USUARIOS,atualizado:Date.now()}).then(()=>{ alert('Usuários salvos na nuvem!'); sv.textContent='Salvar na nuvem'; }).catch(e=>{ alert('Erro: '+e.message); sv.textContent='Salvar na nuvem'; }); };
@@ -660,17 +674,42 @@ function salvarUsuario(){ const nome=document.getElementById('uNome').value.trim
 /* ===== Justificativas por tipo (só Engenheiro Responsável edita) ===== */
 function alertasTipos(o,vol){ const atraso=[]; PROG_LISTA.forEach(p=>{ if(progConf(o,p)==='nao') atraso.push('Atraso na utilização do programa: '+p); }); const custo=[]; const st=statusCusto(o,vol[o]||0); if(st==='vermelho') custo.push('Sinal vermelho de geração de resíduos (realizado passou do orçado)'); else if(st==='amarelo') custo.push('Sinal amarelo de geração de resíduos (atingiu o limite da fase atual)'); return {atraso,custo}; }
 function renderJust(){ const w=document.getElementById('justWrap'); if(!w) return; if(w.contains(document.activeElement)) return; const cyc=cicloAtual(); const vol=volConstrutivoAll();
+  const eObras=(SESSION&&(SESSION.obras||(SESSION.obra?[SESSION.obra]:[])))||[];
   const cards=[]; obrasDoUsuario().forEach(o=>{ if((ATTRS[o]||{}).concluida) return; const at=alertasTipos(o,vol); if(!at.atraso.length && !at.custo.length) return;
-    const podeEditar = SESSION && SESSION.papel==='eng' && (SESSION.obras||(SESSION.obra?[SESSION.obra]:[])).includes(o);
-    const itensNC=[]; at.atraso.forEach(txt=>{ const prog=txt.replace('Atraso na utilização do programa: ',''); itensNC.push({key:'atraso:'+prog,nome:'Atraso — '+prog,itens:[txt]}); }); if(at.custo.length) itensNC.push({key:'custo',nome:'Sinal de custo (amarelo/vermelho)',itens:at.custo}); let blocos=''; itensNC.forEach(t=>{ const j=(((JUST[o]||{})[cyc])||{})[t.key]||{}; const ok=j.justificativa&&j.plano;
-      const status = ok?'<span style="background:#E6F4EA;color:#217a45;padding:1px 8px;border-radius:4px;font-size:11px">respondida ✓</span>':'<span style="background:#F7D9D5;color:#C0463B;padding:1px 8px;border-radius:4px;font-size:11px">aguardando</span>';
+    const souEng=SESSION&&SESSION.papel==='eng'&&eObras.includes(o);
+    const souAnalista=SESSION&&SESSION.papel==='analista_q'&&eObras.includes(o);
+    const souGestor=SESSION&&SESSION.papel==='gestor_ma';
+    const itensNC=[]; at.atraso.forEach(txt=>{ const prog=txt.replace('Atraso na utilização do programa: ',''); itensNC.push({key:'atraso:'+prog,nome:'Atraso — '+prog,itens:[txt]}); }); if(at.custo.length) itensNC.push({key:'custo',nome:'Sinal de custo (amarelo/vermelho)',itens:at.custo});
+    let blocos=''; itensNC.forEach(t=>{ const j=(((JUST[o]||{})[cyc])||{})[t.key]||{}; const temJust=j.justificativa&&j.plano; const aprovado=j.gestor&&j.gestor.status==='aprovado';
+      let stTxt,stBg,stFg;
+      if(!temJust){ stTxt='aguardando engenheiro'; stBg='#F7D9D5'; stFg='#C0463B'; }
+      else if(!j.analista){ stTxt='aguardando análise (Analista de Qualidade)'; stBg='#FAEEDA'; stFg='#854F0B'; }
+      else if(j.analista.status==='reprovado'){ stTxt='reprovado pelo Analista — refazer'; stBg='#F7D9D5'; stFg='#C0463B'; }
+      else if(!j.gestor){ stTxt='aguardando análise (Gestor de Meio Ambiente)'; stBg='#FAEEDA'; stFg='#854F0B'; }
+      else if(j.gestor.status==='reprovado'){ stTxt='reprovado pelo Gestor — refazer'; stBg='#F7D9D5'; stFg='#C0463B'; }
+      else { stTxt='APROVADO'; stBg='#E6F4EA'; stFg='#217a45'; }
+      const status='<span style="background:'+stBg+';color:'+stFg+';padding:1px 8px;border-radius:4px;font-size:11px;font-weight:600">'+stTxt+'</span>';
       const lista='<ul style="margin:4px 0 8px 18px;color:#C0463B;font-size:13px">'+t.itens.map(a=>'<li>'+a+'</li>').join('')+'</ul>';
-      let corpo; if(podeEditar){ corpo='<label class="lbl">Justificativa</label><textarea class="inp jJust" data-t="'+t.key+'" rows="2" style="width:100%;box-sizing:border-box">'+(j.justificativa||'')+'</textarea><label class="lbl" style="margin-top:6px">Plano de ação para correção</label><textarea class="inp jPlano" data-t="'+t.key+'" rows="2" style="width:100%;box-sizing:border-box">'+(j.plano||'')+'</textarea><div style="margin-top:6px;display:flex;gap:10px;align-items:center"><button class="btn sm jSave" data-t="'+t.key+'">Salvar</button>'+(j.data?'<span style="font-size:12px;color:var(--slate)">Salvo em '+new Date(j.data).toLocaleDateString('pt-BR')+(j.autor?' por '+j.autor:'')+'</span>':'')+'</div>'; }
-      else { corpo = ok ? ('<div style="font-size:13px;background:#F7F9FA;border:1px solid #e3e6ea;border-radius:6px;padding:8px 10px;white-space:pre-wrap"><b>Justificativa:</b> '+j.justificativa+'<br><b>Plano de ação:</b> '+j.plano+'</div>') : '<p style="font-size:12px;color:var(--slate);margin:2px 0 0">Somente o <b>Engenheiro Responsável</b> desta obra pode registrar (faça login em “Entrar”).</p>'; }
-      blocos+='<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px"><div style="font-weight:600;font-size:13px">'+t.nome+' '+status+'</div>'+lista+corpo+'</div>'; });
+      const podeEditar=souEng&&!aprovado; let corpo;
+      if(podeEditar){ corpo='<label class="lbl">Justificativa</label><textarea class="inp jJust" data-t="'+t.key+'" rows="2" style="width:100%;box-sizing:border-box">'+(j.justificativa||'')+'</textarea><label class="lbl" style="margin-top:6px">Plano de ação para correção</label><textarea class="inp jPlano" data-t="'+t.key+'" rows="2" style="width:100%;box-sizing:border-box">'+(j.plano||'')+'</textarea><div style="margin-top:6px"><button class="btn sm jSave" data-t="'+t.key+'">'+(temJust?'Reenviar':'Enviar')+'</button></div>'; }
+      else if(temJust){ corpo='<div style="font-size:13px;background:#F7F9FA;border:1px solid #e3e6ea;border-radius:6px;padding:8px 10px;white-space:pre-wrap"><b>Justificativa:</b> '+j.justificativa+'<br><b>Plano de ação:</b> '+j.plano+(j.autor?'<br><span style="color:var(--slate);font-size:11px">por '+j.autor+'</span>':'')+'</div>'; }
+      else { corpo='<p style="font-size:12px;color:var(--slate);margin:2px 0 0">Aguardando o Engenheiro Responsável registrar a justificativa e o plano de ação.</p>'; }
+      let trilha='';
+      if(j.analista){ trilha+='<div style="font-size:12px;margin-top:6px;color:'+(j.analista.status==='aprovado'?'#217a45':'#C0463B')+'">Analista de Qualidade: <b>'+(j.analista.status==='aprovado'?'aprovado':'reprovado')+'</b>'+(j.analista.por?' por '+j.analista.por:'')+((j.analista.status==='reprovado'&&j.analista.motivo)?' — motivo: '+j.analista.motivo:'')+'</div>'; }
+      if(j.gestor){ trilha+='<div style="font-size:12px;margin-top:2px;color:'+(j.gestor.status==='aprovado'?'#217a45':'#C0463B')+'">Gestor de Meio Ambiente: <b>'+(j.gestor.status==='aprovado'?'aprovado':'reprovado')+'</b>'+(j.gestor.por?' por '+j.gestor.por:'')+((j.gestor.status==='reprovado'&&j.gestor.motivo)?' — motivo: '+j.gestor.motivo:'')+'</div>'; }
+      const podeAnalisar=souAnalista&&temJust&&!j.analista; const podeGestor=souGestor&&temJust&&j.analista&&j.analista.status==='aprovado'&&!j.gestor; let aprova='';
+      if(podeAnalisar||podeGestor){ const fase=podeAnalisar?'analista':'gestor'; aprova='<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm jAprov" data-t="'+t.key+'" data-fase="'+fase+'" style="background:#2E9E5B">Aprovar</button><button class="btn sm jReprovBtn" data-t="'+t.key+'" data-fase="'+fase+'" style="background:#C0463B">Reprovar</button></div><div class="jReprovBox" data-t="'+t.key+'" style="display:none;margin-top:8px"><label class="lbl">Motivo da reprovação</label><textarea class="inp jMotivo" data-t="'+t.key+'" rows="2" style="width:100%;box-sizing:border-box"></textarea><div style="margin-top:6px"><button class="btn sm jReprovOk" data-t="'+t.key+'" data-fase="'+fase+'" style="background:#C0463B">Confirmar reprovação</button></div></div>'; }
+      blocos+='<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px"><div style="font-weight:600;font-size:13px">'+t.nome+' '+status+'</div>'+lista+corpo+trilha+aprova+'</div>'; });
     cards.push('<div class="ocard" data-o="'+o+'"><div style="font-weight:600;margin-bottom:2px">'+o+' <span style="color:var(--slate);font-weight:400">— '+(progEtapaAtual(o)||'sem etapa')+'</span></div>'+blocos+'</div>'); });
   w.innerHTML=cards.length?cards.join(''):'<p style="font-size:12.5px;color:var(--slate)">Nenhuma obra com alerta no momento. 🎉</p>';
-  w.querySelectorAll('.ocard').forEach(card=>{ const o=card.dataset.o; card.querySelectorAll('.jSave').forEach(btn=>{ btn.addEventListener('click',()=>{ if(!(SESSION&&SESSION.papel==='eng'&&(SESSION.obras||(SESSION.obra?[SESSION.obra]:[])).includes(o))){ alert('Somente o Engenheiro Responsável desta obra pode salvar.'); return; } const tk=btn.dataset.t; const jt=card.querySelector('.jJust[data-t="'+tk+'"]').value.trim(); const pl=card.querySelector('.jPlano[data-t="'+tk+'"]').value.trim(); if(!jt||!pl){ alert('Preencha a justificativa E o plano de ação.'); return; } const cyc2=cicloAtual(); JUST[o]=JUST[o]||{}; JUST[o][cyc2]=JUST[o][cyc2]||{}; JUST[o][cyc2][tk]={justificativa:jt,plano:pl,data:Date.now(),autor:SESSION.login}; if(window._db){ btn.textContent='Salvando...'; window._db.collection('painel').doc('justificativas').set({dados:JUST,atualizado:Date.now()}).then(()=>{ btn.textContent='Salvo ✓'; setTimeout(renderJust,900); }).catch(err=>{ alert('Erro ao salvar: '+err.message); btn.textContent='Salvar'; }); } else { alert('Sem conexão com a nuvem.'); } }); }); }); }
+  function salvarJust(){ if(window._db){ window._db.collection('painel').doc('justificativas').set({dados:JUST,atualizado:Date.now()}).then(()=>setTimeout(renderJust,700)).catch(err=>alert('Erro ao salvar: '+err.message)); } else { alert('Sem conexão com a nuvem.'); } }
+  w.querySelectorAll('.ocard').forEach(card=>{ const o=card.dataset.o;
+    card.querySelectorAll('.jSave').forEach(btn=>{ btn.onclick=()=>{ if(!(SESSION&&SESSION.papel==='eng'&&eObras.includes(o))){ alert('Somente o Engenheiro Responsável desta obra pode salvar.'); return; } const tk=btn.dataset.t; const jt=card.querySelector('.jJust[data-t="'+tk+'"]').value.trim(); const pl=card.querySelector('.jPlano[data-t="'+tk+'"]').value.trim(); if(!jt||!pl){ alert('Preencha a justificativa E o plano de ação.'); return; } const cyc2=cicloAtual(); JUST[o]=JUST[o]||{}; JUST[o][cyc2]=JUST[o][cyc2]||{}; JUST[o][cyc2][tk]={justificativa:jt,plano:pl,data:Date.now(),autor:SESSION.login}; btn.textContent='Enviando...'; salvarJust(); }; });
+    card.querySelectorAll('.jReprovBtn').forEach(btn=>{ btn.onclick=()=>{ const box=card.querySelector('.jReprovBox[data-t="'+btn.dataset.t+'"]'); if(box) box.style.display='block'; }; });
+    card.querySelectorAll('.jAprov').forEach(btn=>{ btn.onclick=()=>{ const tk=btn.dataset.t, fase=btn.dataset.fase; const cyc2=cicloAtual(); const cur=(((JUST[o]||{})[cyc2])||{})[tk]; if(!cur){ alert('Item não encontrado.'); return; } cur[fase]={status:'aprovado',por:SESSION.login,data:Date.now()}; JUST[o][cyc2][tk]=cur; btn.textContent='...'; salvarJust(); }; });
+    card.querySelectorAll('.jReprovOk').forEach(btn=>{ btn.onclick=()=>{ const tk=btn.dataset.t, fase=btn.dataset.fase; const mel=card.querySelector('.jMotivo[data-t="'+tk+'"]'); const mot=mel?mel.value.trim():''; if(!mot){ alert('Escreva o motivo da reprovação.'); return; } const cyc2=cicloAtual(); const cur=(((JUST[o]||{})[cyc2])||{})[tk]; if(!cur){ alert('Item não encontrado.'); return; } cur[fase]={status:'reprovado',motivo:mot,por:SESSION.login,data:Date.now()}; JUST[o][cyc2][tk]=cur; btn.textContent='...'; salvarJust(); }; });
+  });
+}
 
 /* ===== Adicionar obra ===== */
 let NOVAS=[];try{NOVAS=JSON.parse(localStorage.getItem('novas_obras')||'[]');}catch(e){NOVAS=[];}
@@ -682,6 +721,10 @@ function renderObras(){const w=document.getElementById('obrasWrap');if(!NOVAS.le
 function baixarCsv(){const esc=v=>/[",;\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;const linhas=[['Obra','Login (CNPJ)','Senha','Etapa','Ativo']].concat(NOVAS.map(o=>[o.obra,o.cnpj,o.senha,'',o.ativo]));const csv='﻿'+linhas.map(l=>l.map(esc).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='novas_obras.csv';a.click();URL.revokeObjectURL(a.href);}
 document.getElementById('btAdd').onclick=()=>{const obra=document.getElementById('oNome').value.trim();const cnpj=document.getElementById('oCnpj').value.replace(/\D/g,'');const senha=document.getElementById('oSenhaN').value.trim();const ativo=document.getElementById('oAtivo').value;if(!obra||!cnpj||!senha){alert('Preencha Obra, CNPJ e Senha.');return;}NOVAS.push({obra,cnpj,senha,ativo});salvarNovas();renderObras();document.getElementById('oNome').value='';document.getElementById('oCnpj').value='';document.getElementById('oSenhaN').value='conx2016';};
 renderObras();
+/* ===== Abas ===== */
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } }
+document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
+showTab('painel');
 document.querySelectorAll('.panel h3 .ttl').forEach(t=>{t.addEventListener('click',()=>{const cb=t.closest('.panel').querySelector('.calcbase');if(cb)cb.style.display=cb.style.display==='block'?'none':'block';});});
 </script>
 </body>
