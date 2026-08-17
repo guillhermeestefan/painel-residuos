@@ -618,6 +618,8 @@ function setNetTag(){
 
 const OBRAS_KEY = "pct:obras:v3";
 const CAT_KEY = "pct:catalog:v1";
+const CATI = id => "pct:cat:"+id;
+const CAT_ORDER_KEY = "pct:catalog:order:v1";
 
 const DEFAULT_CATALOG = [
   {tipo:"Material",descricao:"Esquadrias de Alumínio (Não Padronizado)",ensaios:"Não aplicável",nbr:"NBR 10821 PT 2 a 4",fase:"projeto_executivo",area:"projetos",meio:"Projeto Executivo / Liberado Obra",info:"ART e Projeto de Caixilho — entende-se que os ensaios/laudos foram analisados pelo projetista/consultor junto ao fabricante. Se possível, anexar a evidência (e-mail) da análise ou inserir observação em folha de projeto."},
@@ -758,7 +760,24 @@ async function loadAll(){
     const dates=[meta.updatedAt].concat(itens.map(i=>i.updatedAt)).filter(Boolean).sort(cmpDate);
     const _mp=Array.isArray(meta.projUsers)?meta.projUsers:(meta.projUser?[meta.projUser]:[]);return {id:meta.id, nome:meta.nome||"", data:meta.data||"", projUsersAnte:Array.isArray(meta.projUsersAnte)?meta.projUsersAnte:_mp.slice(), projUsersExec:Array.isArray(meta.projUsersExec)?meta.projUsersExec:_mp.slice(), qualUser:meta.qualUser||"", supUser:meta.supUser||"", prazoAnte:meta.prazoAnte||meta.prazoProj||"", prazoExec:meta.prazoExec||"", prazoObra:meta.prazoObra||"", updatedAt:dates.length?dates[dates.length-1]:(meta.updatedAt||""), itens};
   }).filter(Boolean);
-  const rc=await sGet(CAT_KEY); let c=rc?safeParse(rc,null):null; catalog=(c&&c.length)?c:seedCatalog();
+  // Catálogo item-a-item (evita que gravações concorrentes apaguem itens).
+  const catRows = await sList("pct:cat:");
+  if(catRows && catRows.length){
+    const map={}; catRows.forEach(r=>{ const c=safeParse(r.value,null); if(c&&c.id) map[c.id]=c; });
+    const ord = safeParse(await sGet(CAT_ORDER_KEY), null);
+    let ids = Array.isArray(ord) ? ord.filter(id=>map[id]) : [];
+    Object.keys(map).forEach(id=>{ if(ids.indexOf(id)<0) ids.push(id); });
+    catalog = ids.map(id=>map[id]);
+  } else {
+    const rc=await sGet(CAT_KEY); let netC=rc?safeParse(rc,null):null;
+    let locC=null; try{ const lv=localStorage.getItem(CAT_KEY); locC=lv?safeParse(lv,null):null; }catch(e){}
+    const map={}, order=[];
+    (Array.isArray(netC)?netC:[]).forEach(c=>{ if(c&&c.id&&!map[c.id]){ map[c.id]=c; order.push(c.id); } });
+    (Array.isArray(locC)?locC:[]).forEach(c=>{ if(c&&c.id&&!map[c.id]){ map[c.id]=c; order.push(c.id); } });
+    catalog = order.length ? order.map(id=>map[id]) : seedCatalog();
+    for(const it of catalog){ await sSet(CATI(it.id), JSON.stringify(it)); }
+    await sSet(CAT_ORDER_KEY, JSON.stringify(catalog.map(x=>x.id)));
+  }
   const rs=await sGet(STATUS_KEY); let sr=rs?safeParse(rs,null):null;
   if(sr&&sr.length){ statusReg=sr; } else { statusReg=DEFAULT_STATUS.map(x=>({...x})); }
   if(!statusReg.some(x=>x.id==="pendente")) statusReg.unshift({...DEFAULT_STATUS[0]});
@@ -771,7 +790,9 @@ async function loadAll(){
 function seedCatalog(){return DEFAULT_CATALOG.map((c,i)=>({id:"cat"+i+"_"+Math.random().toString(36).slice(2,6),...c}));}
 async function persistStatus(){ await sSet(STATUS_KEY,JSON.stringify(statusReg)); buildStatus(); }
 async function persistObras(){ for(const o of obras){ await saveObraFull(o); } }
-async function persistCat(){ await sSet(CAT_KEY,JSON.stringify(catalog)); const cc=document.getElementById("catCount"); if(cc) cc.textContent=catalog.length; }
+async function saveCatRow(c){ const ok=await sSet(CATI(c.id),JSON.stringify(c)); await sSet(CAT_ORDER_KEY,JSON.stringify(catalog.map(x=>x.id))); sSet(CAT_KEY,JSON.stringify(catalog)); const cc=document.getElementById("catCount"); if(cc) cc.textContent=catalog.length; return ok; }
+async function delCatRow(id){ await sDel(CATI(id)); await sSet(CAT_ORDER_KEY,JSON.stringify(catalog.map(x=>x.id))); sSet(CAT_KEY,JSON.stringify(catalog)); const cc=document.getElementById("catCount"); if(cc) cc.textContent=catalog.length; }
+async function persistCat(){ for(const it of catalog){ await sSet(CATI(it.id),JSON.stringify(it)); } await sSet(CAT_ORDER_KEY,JSON.stringify(catalog.map(x=>x.id))); sSet(CAT_KEY,JSON.stringify(catalog)); const cc=document.getElementById("catCount"); if(cc) cc.textContent=catalog.length; }
 async function persistMasters(){ await sSet(MASTERS_KEY,JSON.stringify(masters)); }
 function activeMasters(){ return masters.filter(m=>m.ativo); }
 async function resetAll(){
@@ -1458,15 +1479,18 @@ function openCatForm(id){
   document.getElementById("scrimCat").classList.add("on");document.getElementById("catSheet").classList.add("on");
 }
 function closeCatForm(){document.getElementById("scrimCat").classList.remove("on");document.getElementById("catSheet").classList.remove("on");}
-function saveCat(){
+async function saveCat(){
   const desc=document.getElementById("c_desc").value.trim();
   if(!desc){document.getElementById("cf-desc").classList.add("err");toast("Informe a descrição.",false);return;}
   const rec={tipo:document.getElementById("c_tipo").value,descricao:desc,ensaios:document.getElementById("c_ensaios").value.trim(),nbr:document.getElementById("c_nbr").value.trim(),meio:document.getElementById("c_meio").value.trim(),info:document.getElementById("c_info").value.trim(),fase:document.getElementById("c_fase").value,area:document.getElementById("c_area").value,rule:document.getElementById("c_rule").checked?"prototipo":null};
-  if(editingCatId){const c=catalog.find(x=>x.id===editingCatId);Object.assign(c,rec);toast("Item padrão atualizado.",true);}
-  else{catalog.push({id:"cat"+Date.now()+Math.random().toString(36).slice(2,5),...rec});toast("Item padrão adicionado.",true);}
-  persistCat();closeCatForm();renderView();
+  let c;
+  if(editingCatId){ c=catalog.find(x=>x.id===editingCatId); Object.assign(c,rec); }
+  else { c={id:"cat"+Date.now()+Math.random().toString(36).slice(2,5),...rec}; catalog.push(c); }
+  const ok=await saveCatRow(c);
+  closeCatForm();renderView();
+  toast(ok?"Item padrão salvo.":"⚠ Não foi possível salvar na rede — verifique a conexão e tente novamente.",ok);
 }
-function deleteCat(){if(!editingCatId)return;if(!confirm("Remover este item do checklist padrão? (Obras já criadas não são afetadas.)"))return;catalog=catalog.filter(x=>x.id!==editingCatId);persistCat();closeCatForm();renderView();toast("Item padrão removido.",true);}
+async function deleteCat(){if(!editingCatId)return;if(!confirm("Remover este item do checklist padrão? (Obras já criadas não são afetadas.)"))return;const id=editingCatId;catalog=catalog.filter(x=>x.id!==id);await delCatRow(id);closeCatForm();renderView();toast("Item padrão removido.",true);}
 
 /* PENDÊNCIAS (mapa/rankings) */
 let pendFilter="";
