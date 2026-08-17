@@ -69,6 +69,10 @@ input,select,textarea{ font-family:inherit; font-size:14px; color:var(--ink); }
 .btn-primary{ background:var(--conx); color:#fff; font-weight:600; font-size:13.5px; padding:9px 15px; border-radius:8px; display:inline-flex; align-items:center; gap:6px; }
 .btn-primary:hover{ filter:brightness(.96); }
 .btn-icon{ background:#f0f2f5; color:#33465a; border-radius:8px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+.btn-icon.spin{ pointer-events:none; }
+.btn-icon.spin>*{ display:inline-block; animation:spin .7s linear infinite; }
+.btn-icon.spin{ animation:spin .7s linear infinite; }
+@keyframes spin{ from{ transform:rotate(0) } to{ transform:rotate(360deg) } }
 .btn-icon:hover{ filter:brightness(.97); }
 
 /* ---- METHODOLOGY / SEMAFORO ---- */
@@ -410,7 +414,7 @@ tbody tr:hover{ background:#fbfcfd; }
     <div class="tab" id="nav-status" onclick="showView('status')"><span class="si">🏷️</span> Situações</div>
     <div class="tab" id="nav-users" onclick="showView('users')"><span class="si">👤</span> Usuários</div>
     <div class="tabbar-actions">
-      <button class="btn-icon" onclick="loadAll()" title="Atualizar">🔄</button>
+      <button class="btn-icon" onclick="pctRefresh(this)" title="Atualizar dados">🔄</button>
       <button class="btn-icon" onclick="exportCsv()" title="Exportar CSV">📥</button>
     </div>
   </div>
@@ -1808,6 +1812,14 @@ window.addEventListener("keydown",e=>{ if(e.key==="Enter" && !authed) doLogin();
 initBackend();
 loadAll();
 function pctMaybeRefresh(){ if(!authed||!NET) return; if(document.querySelector('.scrim.on')) return; if(view==='obras'||view==='obra'||view==='catalog'||view==='users'||view==='pendencias') loadAll(); }
+async function pctRefresh(btn){
+  try{
+    if(btn){ btn.classList.add('spin'); btn.disabled=true; }
+    await loadAll();
+    toast("Dados atualizados.", true);
+  }catch(e){ toast("Não foi possível atualizar agora — verifique a conexão.", false); }
+  finally{ if(btn){ setTimeout(()=>{ btn.classList.remove('spin'); btn.disabled=false; }, 400); } }
+}
 setInterval(pctMaybeRefresh, 30000);
 window.addEventListener('focus', pctMaybeRefresh);
 
