@@ -1640,7 +1640,7 @@ function isSuprimentos(){ return CUR.perfil==="suprimentos"; }
 function isAreaWorker(){ return isProjetos()||isQualidade()||isSuprimentos(); }
 function myArea(){ return isProjetos()?"projetos":isQualidade()?"qualidade":isSuprimentos()?"suprimentos":null; }
 /* Qualidade e Master·Qualidade enxergam TODOS os itens da obra (visão global) */
-function seesAllItems(){ return isMaster() || CUR.perfil==="qualidade"; }
+function seesAllItems(){ return CUR.perfil==="master"||CUR.perfil==="master_qual"||CUR.perfil==="qualidade"; }
 function canApproveProjetos(){ return CUR.perfil==="master"||CUR.perfil==="master_proj"; }
 function canApproveQualidade(){ return CUR.perfil==="master"||CUR.perfil==="master_qual"; }
 function canApproveSuprimentos(){ return CUR.perfil==="master"||CUR.perfil==="master_sup"; }
@@ -1650,9 +1650,9 @@ const AREAS=[["projetos","Projetos"],["qualidade","Qualidade"],["suprimentos","S
 function faseLabel(f){ const x=FASES.find(a=>a[0]===f); return x?x[1]:"Ante-Projeto"; }
 function areaLabel(a){ const x=AREAS.find(z=>z[0]===a); return x?x[1]:"Projetos"; }
 function visibleAreasForMe(){
-  if(seesAllItems()) return null;                     // todos os Master + Qualidade veem todas as áreas
-  if(CUR.perfil==="projetos") return ["projetos"];
-  if(CUR.perfil==="suprimentos") return ["suprimentos"];
+  if(seesAllItems()) return null;                     // Master geral, Master·Qualidade e Qualidade veem tudo
+  if(CUR.perfil==="master_proj"||CUR.perfil==="projetos") return ["projetos"];
+  if(CUR.perfil==="master_sup"||CUR.perfil==="suprimentos") return ["suprimentos"];
   return null;
 }
 function itemVisibleToMe(it){ const a=visibleAreasForMe(); if(!a) return true; return a.indexOf(it.area||"projetos")>=0; }
