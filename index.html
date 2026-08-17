@@ -923,25 +923,41 @@ function renderObra(){
   };
   const vitens=o.itens.filter(it=>itemVisibleInObra(it,o));
   const curFase=obraFase(o);
-  const faseBlocks=FASE_ORDER.map(F=>{
-    const its=vitens.filter(it=>(it.fase||"anteprojeto")===F);
-    if(!its.length) return "";
-    const isCur=F===curFase, isPast=faseIndex(F)<faseIndex(curFase);
+  const groupDefs=[
+    {label:"Ante-Projeto", fase:"anteprojeto", area:null},
+    {label:"Projeto Executivo", fase:"projeto_executivo", area:null},
+    {label:"Obra · Qualidade", fase:"obra", area:"qualidade"},
+    {label:"Obra · Suprimentos", fase:"obra", area:"suprimentos"}
+  ];
+  const obraOutros = vitens.filter(it=>(it.fase||"anteprojeto")==="obra" && (it.area||"projetos")!=="qualidade" && (it.area||"projetos")!=="suprimentos");
+  if(obraOutros.length) groupDefs.push({label:"Obra · Projetos", fase:"obra", area:"__outros__"});
+  const diagShown={};
+  const faseBlocks=groupDefs.map(g=>{
+    let its;
+    if(g.area==="__outros__") its=obraOutros;
+    else if(g.area) its=vitens.filter(it=>(it.fase||"anteprojeto")===g.fase && (it.area||"projetos")===g.area);
+    else its=vitens.filter(it=>(it.fase||"anteprojeto")===g.fase);
+    if(!its.length && !isMaster()) return "";
+    const isCur=g.fase===curFase, isPast=faseIndex(g.fase)<faseIndex(curFase);
     const tagCls=isCur?"fp-cur":isPast?"fp-past":"fp-future";
     const tag=isCur?"fase atual":isPast?"concluída · leitura":"próxima fase";
     let diag="";
-    if(isCur){
-      const allF=(o.itens||[]).filter(it=>(it.fase||"anteprojeto")===F);
+    if(isCur && !diagShown[g.fase]){
+      diagShown[g.fase]=true;
+      const allF=(o.itens||[]).filter(it=>(it.fase||"anteprojeto")===g.fase);
       const bloq=allF.filter(it=>!statusResolvido(it.status)||it.pending);
       const naoRes=allF.filter(it=>!statusResolvido(it.status)&&!it.pending).length;
       const aguard=allF.filter(it=>it.pending).length;
-      if(bloq.length){ diag=`<div class="fase-diag">⏳ Faltam <b>${bloq.length}</b> item(ns) para avançar de fase${naoRes?` · ${naoRes} sem situação concluída`:""}${aguard?` · ${aguard} aguardando aprovação do Master`:""}.</div>`; }
-      else { diag=`<div class="fase-diag ok">✓ Todos os itens desta fase estão concluídos — a obra avança automaticamente.</div>`; }
+      if(allF.length && bloq.length){ diag=`<div class="fase-diag">⏳ Faltam <b>${bloq.length}</b> item(ns) para avançar de fase${naoRes?` · ${naoRes} sem situação concluída`:""}${aguard?` · ${aguard} aguardando aprovação do Master`:""}.</div>`; }
+      else if(allF.length){ diag=`<div class="fase-diag ok">✓ Todos os itens desta fase estão concluídos — a obra avança automaticamente.</div>`; }
     }
+    const body = its.length
+      ? `<div class="panel"><table><thead><tr><th>Tipo</th><th>Item / Ensaio / NBR</th><th>Meio</th><th>Situação</th><th>Documento</th><th></th></tr></thead><tbody>${its.map(itemRowHTML).join("")}</tbody></table></div>`
+      : `<div class="anexo-empty" style="padding:16px 12px">— nenhum item nesta fase/área ainda —</div>`;
     return `<div class="fase-group">
-      <div class="fase-group-h"><span class="fp-name">${esc(faseLabel(F))}</span><span class="fp-tag ${tagCls}">${tag}</span><span class="fp-count">${its.length} ${its.length===1?'item':'itens'}</span></div>
+      <div class="fase-group-h"><span class="fp-name">${esc(g.label)}</span><span class="fp-tag ${tagCls}">${tag}</span><span class="fp-count">${its.length} ${its.length===1?'item':'itens'}</span></div>
       ${diag}
-      <div class="panel"><table><thead><tr><th>Tipo</th><th>Item / Ensaio / NBR</th><th>Meio</th><th>Situação</th><th>Documento</th><th></th></tr></thead><tbody>${its.map(itemRowHTML).join("")}</tbody></table></div>
+      ${body}
     </div>`;
   }).join("");
   const rows=faseBlocks || `<div class="anexo-empty" style="padding:24px">Nenhum item visível para você nesta obra ainda.</div>`;
