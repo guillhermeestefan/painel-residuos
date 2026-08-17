@@ -237,6 +237,10 @@ tbody tr:hover{ background:#fbfcfd; }
 .fp-past{ background:#eef1f4; color:#6a7784; border:1px solid #dbe2e8; }
 .fp-future{ background:#f6f8fa; color:#9aa7b3; border:1px solid #e6eaee; }
 .fp-count{ margin-left:auto; font-size:11.5px; color:var(--muted); }
+.fase-diag{ font-size:12.5px; color:#8a5b00; background:var(--amber-bg); border:1px solid #f2d08a; border-radius:8px; padding:8px 12px; margin-bottom:9px; }
+.fase-diag.ok{ color:#1e6b34; background:var(--green-bg); border-color:#a9dcb8; }
+.btn-secondary{ background:#eef1f4; color:#33465a; border:1px solid #dbe2e8; border-radius:9px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+.btn-secondary:hover{ filter:brightness(.97); }
 .row-locked{ background:#fbfcfd; }
 .row-locked .cell-item b{ color:#5a6672; }
 .fa-tag{ font-size:11.5px; background:#eef1f4; border:1px solid #dbe2e8; color:#3a4653; border-radius:999px; padding:3px 10px; }
@@ -786,6 +790,7 @@ async function loadAll(){
   if(ms&&ms.length){ masters=ms; } else { masters=DEFAULT_MASTERS.slice(); persistMasters(); }
   const cc=document.getElementById("catCount"); if(cc) cc.textContent=catalog.length;
   renderView();
+  autoSyncCatalog();
 }
 function seedCatalog(){return DEFAULT_CATALOG.map((c,i)=>({id:"cat"+i+"_"+Math.random().toString(36).slice(2,6),...c}));}
 async function persistStatus(){ await sSet(STATUS_KEY,JSON.stringify(statusReg)); buildStatus(); }
@@ -924,8 +929,18 @@ function renderObra(){
     const isCur=F===curFase, isPast=faseIndex(F)<faseIndex(curFase);
     const tagCls=isCur?"fp-cur":isPast?"fp-past":"fp-future";
     const tag=isCur?"fase atual":isPast?"concluída · leitura":"próxima fase";
+    let diag="";
+    if(isCur){
+      const allF=(o.itens||[]).filter(it=>(it.fase||"anteprojeto")===F);
+      const bloq=allF.filter(it=>!statusResolvido(it.status)||it.pending);
+      const naoRes=allF.filter(it=>!statusResolvido(it.status)&&!it.pending).length;
+      const aguard=allF.filter(it=>it.pending).length;
+      if(bloq.length){ diag=`<div class="fase-diag">⏳ Faltam <b>${bloq.length}</b> item(ns) para avançar de fase${naoRes?` · ${naoRes} sem situação concluída`:""}${aguard?` · ${aguard} aguardando aprovação do Master`:""}.</div>`; }
+      else { diag=`<div class="fase-diag ok">✓ Todos os itens desta fase estão concluídos — a obra avança automaticamente.</div>`; }
+    }
     return `<div class="fase-group">
       <div class="fase-group-h"><span class="fp-name">${esc(faseLabel(F))}</span><span class="fp-tag ${tagCls}">${tag}</span><span class="fp-count">${its.length} ${its.length===1?'item':'itens'}</span></div>
+      ${diag}
       <div class="panel"><table><thead><tr><th>Tipo</th><th>Item / Ensaio / NBR</th><th>Meio</th><th>Situação</th><th>Documento</th><th></th></tr></thead><tbody>${its.map(itemRowHTML).join("")}</tbody></table></div>
     </div>`;
   }).join("");
@@ -1102,20 +1117,68 @@ async function deleteStatus(){
   statusReg=statusReg.filter(x=>x.id!==editingStatusId);
   await persistStatus(); closeStatusForm(); renderView(); toast("Situação excluída.",true);
 }
+let catSearch="", catFaseF="", catAreaF="";
+function setCatSearch(v){ catSearch=v; renderCatalog(); const el=document.getElementById("catq"); if(el){ el.focus(); const n=el.value.length; el.setSelectionRange(n,n);} }
+function setCatFaseF(v){ catFaseF=v; renderCatalog(); }
+function setCatAreaF(v){ catAreaF=v; renderCatalog(); }
+async function doSyncCatalog(){
+  const norm=s=>normTxt(s).trim();
+  let added=0, obrasT=0;
+  for(const o of obras){
+    const have=new Set((o.itens||[]).map(it=>norm(it.descricao)));
+    let any=false;
+    for(const cat of catalog){
+      if(have.has(norm(cat.descricao))) continue;
+      const novo={id:"it"+Date.now()+Math.random().toString(36).slice(2,6),tipo:cat.tipo,descricao:cat.descricao,ensaios:cat.ensaios,nbr:cat.nbr,meio:cat.meio,info:cat.info,rule:cat.rule,fase:cat.fase||"anteprojeto",area:cat.area||"projetos",status:"pendente",anexos:[],comentarios:[],historico:[],docUrl:"",docNome:"",justificativa:"",obs:"",custom:false,ruleAnswer:null,updatedAt:today()};
+      o.itens.push(novo); await saveItemRow(o,novo); added++; any=true; have.add(norm(cat.descricao));
+    }
+    if(any){ await saveObraMeta(o); obrasT++; }
+  }
+  return {added, obrasT};
+}
+async function syncCatalogToObras(){
+  if(!confirm("Inserir os itens padrão que faltam em TODAS as obras já existentes?\n\nItens iguais (mesma descrição) não são duplicados; nada é removido.")) return;
+  const {added,obrasT}=await doSyncCatalog();
+  renderView();
+  toast(added? `${added} item(ns) inserido(s) em ${obrasT} obra(s).` : "Todas as obras já contêm os itens padrão atuais.", true);
+}
+let _catAutoSynced=false;
+async function autoSyncCatalog(){
+  if(_catAutoSynced) return; if(!authed || !isMaster()) return;
+  _catAutoSynced=true;
+  try{ const {added}=await doSyncCatalog(); if(added){ toast(`${added} item(ns) padrão incluído(s) automaticamente nas obras.`,true); renderView(); } }catch(e){}
+}
 function renderCatalog(){
   const v=document.getElementById("view");
-  const rows=catalog.map(cat=>`<tr>
+  const q=normTxt(catSearch);
+  const list=catalog.filter(cat=>{
+    if(catFaseF && (cat.fase||"anteprojeto")!==catFaseF) return false;
+    if(catAreaF && (cat.area||"projetos")!==catAreaF) return false;
+    if(q && normTxt((cat.descricao||"")+" "+(cat.ensaios||"")+" "+(cat.nbr||"")+" "+(cat.tipo||"")).indexOf(q)<0) return false;
+    return true;
+  });
+  const rows=list.map(cat=>`<tr>
     <td data-label="Tipo"><span class="tag-tipo ${esc(cat.tipo)}">${esc(cat.tipo)}</span></td>
     <td data-label="Item" class="cell-item"><b>${esc(cat.descricao)}</b>${cat.ensaios&&cat.ensaios!=="Não aplicável"?`<div class="ci-sub">${esc(cat.ensaios)}</div>`:""}${cat.nbr?`<div class="ci-sub nbr">${esc(cat.nbr)}</div>`:""}${cat.rule==="prototipo"?`<div class="ci-sub" style="color:var(--or-d);font-weight:600">⚙︎ Decisão automática por protótipo</div>`:""}</td>
     <td data-label="Fase / Área"><span class="fa-tag">${esc(faseLabel(cat.fase))}</span> <span class="fa-tag">${esc(areaLabel(cat.area))}</span></td>
     <td data-label="Projetos"><span class="meio" style="color:var(--muted)">${esc(cat.info||"—")}</span></td>
     <td class="cell-actions"><div class="row-actions"><button class="icon-sm" onclick="openCatForm('${cat.id}')" aria-label="Editar">✏️</button></div></td>
   </tr>`).join("");
+  const faseOpts=`<option value="">Todas as fases</option>`+FASES.map(([val,l])=>`<option value="${val}"${catFaseF===val?" selected":""}>${l}</option>`).join("");
+  const areaOpts=`<option value="">Todas as áreas</option>`+AREAS.map(([val,l])=>`<option value="${val}"${catAreaF===val?" selected":""}>${l}</option>`).join("");
   v.innerHTML=`
-    <div class="cat-note">🛈 Estes são os itens carregados automaticamente em <b>cada obra nova</b>, já com a <b>Fase</b> e <b>Área</b> definidas aqui. Alterações aqui valem para as <b>próximas</b> obras criadas; obras já existentes mantêm o checklist do momento em que foram criadas (mas você pode ajustar item a item dentro de cada obra).</div>
-    <div class="panel"><table><thead><tr><th>Tipo</th><th>Item / Ensaio / NBR</th><th>Fase / Área</th><th>Precisa vir de projetos</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px">Nenhum item padrão. Adicione o primeiro.</td></tr>`}</tbody></table></div>`;
+    <div class="cat-note">🛈 Estes são os itens carregados automaticamente em <b>cada obra nova</b>, já com a <b>Fase</b> e <b>Área</b> definidas aqui. Para levar os itens novos às obras <b>já existentes</b>, use o botão <b>“🔄 Incluir estes itens nas Obras”</b>.</div>
+    <div class="toolbar" style="flex-wrap:wrap;gap:10px;align-items:center">
+      <div class="search" style="max-width:320px"><span>🔎</span><input id="catq" type="text" placeholder="Buscar item, ensaio ou NBR…" value="${esc(catSearch)}" oninput="setCatSearch(this.value)"></div>
+      <span style="font-size:12.5px;color:var(--muted);font-weight:600">Filtrar por:</span>
+      <select class="pend-filter" onchange="setCatFaseF(this.value)" title="Filtrar por fase">${faseOpts}</select>
+      <select class="pend-filter" onchange="setCatAreaF(this.value)" title="Filtrar por área">${areaOpts}</select>
+      ${(catSearch||catFaseF||catAreaF)?`<button class="btn-secondary" onclick="setCatSearch('');setCatFaseF('');setCatAreaF('')" style="padding:8px 12px">✕ Limpar</button>`:""}
+      <button class="btn-primary" onclick="syncCatalogToObras()" style="margin-left:auto;padding:10px 16px">🔄 Incluir estes itens nas Obras</button>
+    </div>
+    <div class="hint" style="margin:-6px 2px 12px">Mostrando <b>${list.length}</b> de <b>${catalog.length}</b> ${catalog.length===1?'item':'itens'}.</div>
+    <div class="panel"><table><thead><tr><th>Tipo</th><th>Item / Ensaio / NBR</th><th>Fase / Área</th><th>Precisa vir de projetos</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px">${catalog.length?"Nenhum item corresponde à busca/filtro.":"Nenhum item padrão. Adicione o primeiro."}</td></tr>`}</tbody></table></div>`;
 }
-
 /* OBRA FORM */
 function openObraForm(id){
   editingObraId=id||null;const o=id?obras.find(x=>x.id===id):null;
