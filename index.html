@@ -1143,30 +1143,48 @@ function setCatFaseF(v){ catFaseF=v; renderCatalog(); }
 function setCatAreaF(v){ catAreaF=v; renderCatalog(); }
 async function doSyncCatalog(){
   const norm=s=>normTxt(s).trim();
-  let added=0, obrasT=0;
+  if(!catalog.length) return {added:0,updated:0,removed:0,obrasT:0}; // guarda: nunca sincroniza contra catálogo vazio
+  const catById={}; catalog.forEach(c=>catById[c.id]=c);
+  const catByDesc={}; catalog.forEach(c=>{ catByDesc[norm(c.descricao)]=c; });
+  let added=0, updated=0, removed=0, obrasT=0;
   for(const o of obras){
-    const have=new Set((o.itens||[]).map(it=>norm(it.descricao)));
-    let any=false;
-    for(const cat of catalog){
-      if(have.has(norm(cat.descricao))) continue;
-      const novo={id:"it"+Date.now()+Math.random().toString(36).slice(2,6),tipo:cat.tipo,descricao:cat.descricao,ensaios:cat.ensaios,nbr:cat.nbr,meio:cat.meio,info:cat.info,rule:cat.rule,fase:cat.fase||"anteprojeto",area:cat.area||"projetos",status:"pendente",anexos:[],comentarios:[],historico:[],docUrl:"",docNome:"",justificativa:"",obs:"",custom:false,ruleAnswer:null,updatedAt:today()};
-      o.itens.push(novo); await saveItemRow(o,novo); added++; any=true; have.add(norm(cat.descricao));
+    let any=false; const seen={}; const keep=[];
+    for(const it of (o.itens||[])){
+      if(it.custom){ keep.push(it); continue; }              // itens manuais: preservados
+      let cat = (it.catId&&catById[it.catId]) ? catById[it.catId] : catByDesc[norm(it.descricao)];
+      if(!cat){ await delItemRow(o.id,it.id); removed++; any=true; continue; }   // item padrão removido do catálogo
+      if(seen[cat.id]){ await delItemRow(o.id,it.id); removed++; any=true; continue; } // duplicata
+      seen[cat.id]=true;
+      let changed=false;
+      if(it.catId!==cat.id){ it.catId=cat.id; changed=true; }
+      if((it.fase||"anteprojeto")!==(cat.fase||"anteprojeto")){ it.fase=cat.fase||"anteprojeto"; changed=true; }
+      if((it.area||"projetos")!==(cat.area||"projetos")){ it.area=cat.area||"projetos"; changed=true; }
+      ["tipo","descricao","ensaios","nbr","meio","info","rule"].forEach(k=>{ if((it[k]||"")!==(cat[k]||"")){ it[k]=cat[k]; changed=true; } });
+      if(changed){ await saveItemRow(o,it); updated++; any=true; }
+      keep.push(it);
     }
+    for(const cat of catalog){
+      if(seen[cat.id]) continue;
+      const novo={id:"it"+Date.now()+Math.random().toString(36).slice(2,6),catId:cat.id,tipo:cat.tipo,descricao:cat.descricao,ensaios:cat.ensaios,nbr:cat.nbr,meio:cat.meio,info:cat.info,rule:cat.rule,fase:cat.fase||"anteprojeto",area:cat.area||"projetos",status:"pendente",anexos:[],comentarios:[],historico:[],docUrl:"",docNome:"",justificativa:"",obs:"",custom:false,ruleAnswer:null,updatedAt:today()};
+      keep.push(novo); await saveItemRow(o,novo); added++; any=true; seen[cat.id]=true;
+    }
+    o.itens=keep;
     if(any){ await saveObraMeta(o); obrasT++; }
   }
-  return {added, obrasT};
+  return {added,updated,removed,obrasT};
 }
 async function syncCatalogToObras(){
-  if(!confirm("Inserir os itens padrão que faltam em TODAS as obras já existentes?\n\nItens iguais (mesma descrição) não são duplicados; nada é removido.")) return;
-  const {added,obrasT}=await doSyncCatalog();
+  if(!confirm("Sincronizar TODAS as obras com os itens padrão?\n\n• insere os itens que faltam\n• corrige Fase/Área e dados conforme o catálogo\n• remove das obras os itens que não existem mais no catálogo\n(itens criados manualmente na obra são preservados)")) return;
+  const {added,updated,removed,obrasT}=await doSyncCatalog();
   renderView();
-  toast(added? `${added} item(ns) inserido(s) em ${obrasT} obra(s).` : "Todas as obras já contêm os itens padrão atuais.", true);
+  const p=[]; if(added)p.push(added+" incluído(s)"); if(updated)p.push(updated+" ajustado(s)"); if(removed)p.push(removed+" removido(s)");
+  toast(p.length? `${p.join(" · ")} em ${obrasT} obra(s).` : "Todas as obras já espelham os itens padrão.", true);
 }
 let _catAutoSynced=false;
 async function autoSyncCatalog(){
   if(_catAutoSynced) return; if(!authed || !isMaster()) return;
   _catAutoSynced=true;
-  try{ const {added}=await doSyncCatalog(); if(added){ toast(`${added} item(ns) padrão incluído(s) automaticamente nas obras.`,true); renderView(); } }catch(e){}
+  try{ const {added,updated,removed}=await doSyncCatalog(); if(added||updated||removed){ const p=[]; if(added)p.push(added+" incluído(s)"); if(updated)p.push(updated+" ajustado(s)"); if(removed)p.push(removed+" removido(s)"); toast(`Obras sincronizadas com os itens padrão (${p.join(" · ")}).`,true); renderView(); } }catch(e){}
 }
 function renderCatalog(){
   const v=document.getElementById("view");
@@ -1187,14 +1205,14 @@ function renderCatalog(){
   const faseOpts=`<option value="">Todas as fases</option>`+FASES.map(([val,l])=>`<option value="${val}"${catFaseF===val?" selected":""}>${l}</option>`).join("");
   const areaOpts=`<option value="">Todas as áreas</option>`+AREAS.map(([val,l])=>`<option value="${val}"${catAreaF===val?" selected":""}>${l}</option>`).join("");
   v.innerHTML=`
-    <div class="cat-note">🛈 Estes são os itens carregados automaticamente em <b>cada obra nova</b>, já com a <b>Fase</b> e <b>Área</b> definidas aqui. Para levar os itens novos às obras <b>já existentes</b>, use o botão <b>“🔄 Incluir estes itens nas Obras”</b>.</div>
+    <div class="cat-note">🛈 Estes itens são o <b>espelho das obras</b>: ao criar, editar ou excluir um item aqui, <b>todas as obras são atualizadas na hora</b> (inclui os que faltam, corrige Fase/Área e remove os excluídos). Itens criados manualmente dentro de uma obra não são afetados.</div>
     <div class="toolbar" style="flex-wrap:wrap;gap:10px;align-items:center">
       <div class="search" style="max-width:320px"><span>🔎</span><input id="catq" type="text" placeholder="Buscar item, ensaio ou NBR…" value="${esc(catSearch)}" oninput="setCatSearch(this.value)"></div>
       <span style="font-size:12.5px;color:var(--muted);font-weight:600">Filtrar por:</span>
       <select class="pend-filter" onchange="setCatFaseF(this.value)" title="Filtrar por fase">${faseOpts}</select>
       <select class="pend-filter" onchange="setCatAreaF(this.value)" title="Filtrar por área">${areaOpts}</select>
       ${(catSearch||catFaseF||catAreaF)?`<button class="btn-secondary" onclick="setCatSearch('');setCatFaseF('');setCatAreaF('')" style="padding:8px 12px">✕ Limpar</button>`:""}
-      <button class="btn-primary" onclick="syncCatalogToObras()" style="margin-left:auto;padding:10px 16px">🔄 Incluir estes itens nas Obras</button>
+      <button class="btn-primary" onclick="syncCatalogToObras()" style="margin-left:auto;padding:10px 16px">🔄 Sincronizar itens nas Obras</button>
     </div>
     <div class="hint" style="margin:-6px 2px 12px">Mostrando <b>${list.length}</b> de <b>${catalog.length}</b> ${catalog.length===1?'item':'itens'}.</div>
     <div class="panel"><table><thead><tr><th>Tipo</th><th>Item / Ensaio / NBR</th><th>Fase / Área</th><th>Precisa vir de projetos</th><th></th></tr></thead><tbody>${rows||`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px">${catalog.length?"Nenhum item corresponde à busca/filtro.":"Nenhum item padrão. Adicione o primeiro."}</td></tr>`}</tbody></table></div>`;
@@ -1570,10 +1588,21 @@ async function saveCat(){
   if(editingCatId){ c=catalog.find(x=>x.id===editingCatId); Object.assign(c,rec); }
   else { c={id:"cat"+Date.now()+Math.random().toString(36).slice(2,5),...rec}; catalog.push(c); }
   const ok=await saveCatRow(c);
+  const {added,updated,removed,obrasT}=await doSyncCatalog();
   closeCatForm();renderView();
-  toast(ok?"Item padrão salvo.":"⚠ Não foi possível salvar na rede — verifique a conexão e tente novamente.",ok);
+  if(!ok){ toast("⚠ Não foi possível salvar na rede — verifique a conexão e tente novamente.",false); return; }
+  const p=[]; if(added)p.push(added+" incluído(s)"); if(updated)p.push(updated+" ajustado(s)"); if(removed)p.push(removed+" removido(s)");
+  toast(p.length? `Item salvo · obras atualizadas na hora (${p.join(" · ")}).` : "Item padrão salvo. As obras já estavam sincronizadas.", true);
 }
-async function deleteCat(){if(!editingCatId)return;if(!confirm("Remover este item do checklist padrão? (Obras já criadas não são afetadas.)"))return;const id=editingCatId;catalog=catalog.filter(x=>x.id!==id);await delCatRow(id);closeCatForm();renderView();toast("Item padrão removido.",true);}
+async function deleteCat(){
+  if(!editingCatId)return;
+  const cat=catalog.find(x=>x.id===editingCatId); const nome=cat?cat.descricao:"este item";
+  if(!confirm(`Remover "${nome}" do checklist padrão e de TODAS as obras?\n\n⚠ As análises, situações e anexos desse item nas obras serão apagados. (Itens criados manualmente dentro da obra não são afetados.)`))return;
+  catalog=catalog.filter(x=>x.id!==editingCatId);
+  await delCatRow(editingCatId);
+  await doSyncCatalog();
+  closeCatForm();renderView();toast("Item padrão removido do catálogo e das obras.",true);
+}
 
 /* PENDÊNCIAS (mapa/rankings) */
 let pendFilter="";
