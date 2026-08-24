@@ -21,6 +21,7 @@ jobs:
       - name: Extrair CTRs do SP Regula
         env:
           SENHA_SPREGULA: ${{ secrets.SENHA_SPREGULA }}
+          SENHAS_OBRAS: ${{ secrets.SENHAS_OBRAS }}
         run: python extrair_ctrs.py --dias 30
       - name: Publicar dados atualizados
         run: |
