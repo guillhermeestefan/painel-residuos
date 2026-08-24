@@ -189,6 +189,10 @@ def prog_aplicavel(p, et):
     return (et in ETAPAS_CONSTR) if r == 'todas' else (et in r)
 
 
+def _asdict(x):
+    return x if isinstance(x, dict) else {}
+
+
 def prog_em_uso(cell):
     if not cell or not cell.get('ativo'):
         return False
@@ -242,7 +246,7 @@ def alertas_tipos(o, attrs, prog, lista, vol):
     atraso = []
     if et:
         for p in lista:
-            if prog_aplicavel(p, et) and not prog_em_uso((prog.get(o) or {}).get(p) or {}):
+            if prog_aplicavel(p, et) and not prog_em_uso(_asdict(_asdict(prog.get(o)).get(p))):
                 atraso.append('Atraso na utilização do programa: ' + p)
     custo = []
     st = status_custo(attrs, o, vol.get(o, 0.0))
@@ -390,7 +394,7 @@ def main():
     env1 = env2 = 0
 
     for o in obras:
-        if (attrs.get(o) or {}).get('concluida'):
+        if _asdict(attrs.get(o)).get('concluida'):
             continue
         etapa, tipos = alertas_tipos(o, attrs, prog, lista, vol)
         if not (tipos['atraso'] or tipos['custo']):
@@ -408,7 +412,7 @@ def main():
                 env1 += 1
 
         # Etapa 2 por item (cada atraso de programa + o custo), apos justificativa + plano
-        jcyc = (justs.get(o) or {}).get(CICLO) or {}
+        jcyc = _asdict(justs.get(o)).get(CICLO) or {}
         itens_nc = []
         for txt in tipos.get('atraso', []):
             prog = txt.replace('Atraso na utilização do programa: ', '')
