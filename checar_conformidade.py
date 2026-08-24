@@ -190,7 +190,16 @@ def prog_aplicavel(p, et):
 
 
 def _asdict(x):
-    return x if isinstance(x, dict) else {}
+    if isinstance(x, dict):
+        return x
+    if isinstance(x, str):
+        try:
+            y = json.loads(x)
+            if isinstance(y, dict):
+                return y
+        except Exception:
+            pass
+    return {}
 
 
 def prog_em_uso(cell):
@@ -246,7 +255,7 @@ def alertas_tipos(o, attrs, prog, lista, vol):
     atraso = []
     if et:
         for p in lista:
-            if prog_aplicavel(p, et) and not prog_em_uso(_asdict(_asdict(prog.get(o)).get(p))):
+            if prog_aplicavel(p, et) and not prog_em_uso(_asdict(_asdict(_asdict(prog).get(o)).get(p))):
                 atraso.append('Atraso na utilização do programa: ' + p)
     custo = []
     st = status_custo(attrs, o, vol.get(o, 0.0))
@@ -394,7 +403,7 @@ def main():
     env1 = env2 = 0
 
     for o in obras:
-        if _asdict(attrs.get(o)).get('concluida'):
+        if _asdict(_asdict(attrs).get(o)).get('concluida'):
             continue
         etapa, tipos = alertas_tipos(o, attrs, prog, lista, vol)
         if not (tipos['atraso'] or tipos['custo']):
@@ -412,7 +421,7 @@ def main():
                 env1 += 1
 
         # Etapa 2 por item (cada atraso de programa + o custo), apos justificativa + plano
-        jcyc = _asdict(justs.get(o)).get(CICLO) or {}
+        jcyc = _asdict(_asdict(justs).get(o)).get(CICLO) or {}
         itens_nc = []
         for txt in tipos.get('atraso', []):
             prog = txt.replace('Atraso na utilização do programa: ', '')
