@@ -303,7 +303,10 @@ def enviar(assunto, html, destinatarios):
         print(f"   (sem destinatários válidos — não enviado: {assunto})")
         return False
     server = os.environ.get('MAIL_SERVER', '')
-    port = int(os.environ.get('MAIL_PORT', '587'))
+    try:
+        port = int((os.environ.get('MAIL_PORT') or '587').strip())
+    except (ValueError, TypeError):
+        port = 587
     user = os.environ.get('MAIL_USERNAME', '')
     pwd = os.environ.get('MAIL_PASSWORD', '')
     mail_from = os.environ.get('MAIL_FROM', user)
