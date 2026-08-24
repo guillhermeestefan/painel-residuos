@@ -81,7 +81,22 @@ def _ler_csv(path):
                 out.append({"obra":obra,"cnpj":cnpj,"senha":senha,"etapa":etapa,"ativo":ativo})
     return out
 
+def _senhas_override():
+    """Senhas por obra que diferem da compartilhada, vindas do secret SENHAS_OBRAS
+    (JSON {"CNPJ": "senha"}). Mantem senhas fora do repo publico."""
+    raw = os.environ.get("SENHAS_OBRAS", "").strip()
+    if not raw:
+        return {}
+    try:
+        m = json.loads(raw)
+    except Exception as e:
+        print(f"[AVISO] SENHAS_OBRAS ignorado (JSON invalido): {e}")
+        return {}
+    return {"".join(ch for ch in str(k) if ch.isdigit()): str(v) for k, v in m.items()}
+
+
 def ler_cadastro():
+    OVER = _senhas_override()
     linhas = _ler_csv(OBRAS_CSV) + _ler_csv(NOVAS_CSV)
     if not linhas:
         sys.exit("[ERRO] obras.csv não encontrado/vazio.")
@@ -92,7 +107,7 @@ def ler_cadastro():
             continue
         if not o["senha"]:
             continue
-        obras.append({"obra":o["obra"],"cnpj":o["cnpj"],"senha":o["senha"],"etapa":o["etapa"]})
+        obras.append({"obra":o["obra"],"cnpj":o["cnpj"],"senha":OVER.get(o["cnpj"],o["senha"]),"etapa":o["etapa"]})
         vistos.add(o["obra"])
     if not obras:
         sys.exit("[ERRO] Nenhuma obra ativa em obras.csv.")
