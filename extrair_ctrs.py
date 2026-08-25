@@ -414,17 +414,29 @@ def main():
     todos=[]
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=not args.headful)
+        import time
         for o in obras:
-            ctx=browser.new_context(accept_downloads=True); page=ctx.new_page()
-            try:
-                print(f"  -> {o['obra']} (CNPJ {o['cnpj']}) ...", end=" ", flush=True)
-                arq=extrair_obra(page,o,desde,ate,DOWNLOADS)
-                regs=ler_xls_ctr(arq,o); todos.extend(regs)
-                print(f"OK ({len(regs)} CTRs)")
-            except Exception as e:
-                print(f"FALHOU: {str(e).splitlines()[0][:90]}")
-            finally:
-                ctx.close()
+            ok = False
+            ultimo = ""
+            for tent in range(1, 4):
+                ctx = browser.new_context(accept_downloads=True); page = ctx.new_page()
+                try:
+                    print(f"  -> {o['obra']} (CNPJ {o['cnpj']}) tent {tent}/3 ...", end=" ", flush=True)
+                    arq = extrair_obra(page, o, desde, ate, DOWNLOADS)
+                    regs = ler_xls_ctr(arq, o); todos.extend(regs)
+                    print(f"OK ({len(regs)} CTRs)")
+                    ok = True
+                except Exception as e:
+                    ultimo = str(e).splitlines()[0][:90]
+                    print(f"tent {tent} falhou: {ultimo}")
+                finally:
+                    ctx.close()
+                if ok:
+                    break
+                time.sleep(6)
+            if not ok:
+                print(f"  [FALHOU] {o['obra']} apos 3 tentativas: {ultimo}")
+            time.sleep(2)
         browser.close()
 
     total=salvar_consolidado(todos, ativas)
