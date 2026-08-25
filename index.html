@@ -237,7 +237,7 @@
 
   <div class="panel tabpane" data-tab="carac" style="margin-top:16px" id="secAddObra">
     <h3><span class="ttl">Adicionar obra nova (Master)</span></h3>
-    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 14px">Cadastre, clique em <b>Baixar novas_obras.csv</b> e suba no repositório. Na próxima atualização entram.</p>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 14px">Cadastre a obra abaixo. Ela aparece automaticamente na seção <b>Credenciais de acesso</b> (mais abaixo); lá você confirma a senha e clica em <b>Atualizar todas as informações</b> para salvar na nuvem. Não precisa mexer no GitHub.</p>
     <div style="display:grid;grid-template-columns:1.4fr 1fr .9fr .7fr auto;gap:10px;align-items:end">
       <div><label class="lbl">Obra</label><input id="oNome" class="inp" placeholder="Nome" style="width:100%;padding:9px 11px"></div>
       <div><label class="lbl">Login (CNPJ)</label><input id="oCnpj" class="inp" placeholder="só números" style="width:100%;padding:9px 11px"></div>
@@ -723,9 +723,9 @@ function renderJust(){ const w=document.getElementById('justWrap'); if(!w) retur
 let NOVAS=[];try{NOVAS=JSON.parse(localStorage.getItem('novas_obras')||'[]');}catch(e){NOVAS=[];}
 function salvarNovas(){try{localStorage.setItem('novas_obras',JSON.stringify(NOVAS));}catch(e){}}
 function renderObras(){const w=document.getElementById('obrasWrap');if(!NOVAS.length){w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Nenhuma obra nova.</p>';return;}
-  w.innerHTML='<table><thead><tr><th>Obra</th><th>Login (CNPJ)</th><th>Senha</th><th>Ativo</th><th></th></tr></thead><tbody>'+NOVAS.map((o,i)=>`<tr><td>${o.obra}</td><td>${o.cnpj}</td><td>${o.senha}</td><td>${o.ativo}</td><td style="text-align:right"><button data-i="${i}" class="rmObra btn sm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></td></tr>`).join('')+'</tbody></table><button id="btCsv" class="btn" style="margin-top:12px">Baixar novas_obras.csv</button>';
+  w.innerHTML='<table><thead><tr><th>Obra</th><th>Login (CNPJ)</th><th>Senha</th><th>Ativo</th><th></th></tr></thead><tbody>'+NOVAS.map((o,i)=>`<tr><td>${o.obra}</td><td>${o.cnpj}</td><td>${o.senha}</td><td>${o.ativo}</td><td style="text-align:right"><button data-i="${i}" class="rmObra btn sm" style="background:#fff;color:var(--red);border:1px solid var(--line)">remover</button></td></tr>`).join('')+'</tbody></table>';
   w.querySelectorAll('.rmObra').forEach(b=>b.onclick=()=>{NOVAS.splice(+b.dataset.i,1);salvarNovas();renderObras();});
-  document.getElementById('btCsv').onclick=baixarCsv;}
+  }
 function baixarCsv(){const esc=v=>/[",;\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;const linhas=[['Obra','Login (CNPJ)','Senha','Etapa','Ativo']].concat(NOVAS.map(o=>[o.obra,o.cnpj,o.senha,'',o.ativo]));const csv='﻿'+linhas.map(l=>l.map(esc).join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='novas_obras.csv';a.click();URL.revokeObjectURL(a.href);}
 document.getElementById('btAdd').onclick=()=>{const obra=document.getElementById('oNome').value.trim();const cnpj=document.getElementById('oCnpj').value.replace(/\D/g,'');const senha=document.getElementById('oSenhaN').value.trim();const ativo=document.getElementById('oAtivo').value;if(!obra||!cnpj||!senha){alert('Preencha Obra, CNPJ e Senha.');return;}NOVAS.push({obra,cnpj,senha,ativo});salvarNovas();renderObras();document.getElementById('oNome').value='';document.getElementById('oCnpj').value='';document.getElementById('oSenhaN').value='conx2016';};
 renderObras();
