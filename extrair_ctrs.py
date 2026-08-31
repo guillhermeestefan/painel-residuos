@@ -14,6 +14,9 @@ import argparse, csv, json, os, sys, unicodedata
 from datetime import date, timedelta
 from pathlib import Path
 
+import smtplib, ssl
+from email.mime.text import MIMEText
+
 import openpyxl
 
 BASE = Path(__file__).resolve().parent
@@ -23,6 +26,8 @@ DOWNLOADS = BASE / "downloads_ctr"
 CONSOLIDADO = BASE / "base_consolidada.xlsx"
 BASE_JSON = BASE / "base_consolidada.json"
 DADOS_JS = BASE / "dados_ctr.js"
+ESTADO_EXTRACAO = BASE / "estado_extracao.json"
+DIAS_ALERTA = 7   # avisar se uma obra ativa ficar mais de X dias sem extração bem-sucedida
 SITE = "https://rcc-spregula.coletas.online/"
 SENHA_ENV = os.environ.get("SENHA_SPREGULA", "conx2016")
 
@@ -390,6 +395,72 @@ def salvar_consolidado(regs_novos, ativas=None):
                         "window.DADOS_META = "+json.dumps(meta,ensure_ascii=False)+";\n",encoding="utf-8")
     return len(regs)
 
+def _load_estado_extracao():
+    if ESTADO_EXTRACAO.exists():
+        try: return json.loads(ESTADO_EXTRACAO.read_text(encoding="utf-8"))
+        except Exception: return {}
+    return {}
+
+def _enviar_alerta(assunto, corpo_html):
+    """Envia alerta por e-mail usando os mesmos secrets MAIL_* do fluxo. Sem SMTP configurado, só imprime."""
+    server=os.environ.get("MAIL_SERVER",""); user=os.environ.get("MAIL_USERNAME","")
+    pwd=os.environ.get("MAIL_PASSWORD",""); mail_from=os.environ.get("MAIL_FROM",user)
+    to=[e.strip() for e in (os.environ.get("MAIL_TO","") or "").replace(";",",").split(",") if e.strip()]
+    if not (server and user and pwd and to):
+        print(f"   [PRÉVIA — e-mail não enviado, SMTP/MAIL_TO ausente] {assunto} -> {to}"); return
+    try: port=int((os.environ.get("MAIL_PORT") or "587").strip())
+    except Exception: port=587
+    msg=MIMEText(corpo_html,"html","utf-8"); msg["Subject"]=assunto
+    msg["From"]=mail_from; msg["To"]=", ".join(to)
+    ctx=ssl.create_default_context()
+    try:
+        if port==465:
+            with smtplib.SMTP_SSL(server,port,context=ctx,timeout=30) as sv:
+                sv.login(user,pwd); sv.sendmail(mail_from,to,msg.as_string())
+        else:
+            with smtplib.SMTP(server,port,timeout=30) as sv:
+                sv.ehlo(); sv.starttls(context=ctx); sv.login(user,pwd); sv.sendmail(mail_from,to,msg.as_string())
+        print(f"   [ALERTA ENVIADO] {assunto} -> {', '.join(to)}")
+    except Exception as e:
+        print(f"   [ALERTA FALHOU AO ENVIAR] {e}")
+
+def atualizar_estado_e_alertar(resultados, ativas, ate):
+    """Registra o último sucesso por obra e avisa quem passou de DIAS_ALERTA dias sem extrair.
+    Os dados anteriores NUNCA são apagados por falha: salvar_consolidado só acrescenta/atualiza."""
+    hoje = ate.strftime("%Y-%m-%d")
+    estado = _load_estado_extracao()
+    for obra, res in resultados.items():
+        e = estado.get(obra, {})
+        if res["ok"]:
+            e["ultimo_sucesso"]=hoje; e["falhas_seguidas"]=0; e["ultimo_erro"]=""
+        else:
+            e["falhas_seguidas"]=int(e.get("falhas_seguidas",0))+1
+            e["ultimo_erro"]=res.get("erro","")
+            e.setdefault("ultimo_sucesso", e.get("ultimo_sucesso",""))
+        estado[obra]=e
+    ESTADO_EXTRACAO.write_text(json.dumps(estado,ensure_ascii=False,indent=1),encoding="utf-8")
+
+    atrasadas=[]
+    for obra in ativas:
+        e=estado.get(obra,{}); us=e.get("ultimo_sucesso","")
+        if not us:
+            atrasadas.append((obra,"nunca extraída com sucesso",e.get("ultimo_erro","")))
+        else:
+            try: dias=(ate-date.fromisoformat(us)).days
+            except Exception: dias=0
+            if dias>DIAS_ALERTA:
+                atrasadas.append((obra,f"{dias} dias sem sucesso (último em {us})",e.get("ultimo_erro","")))
+    if atrasadas:
+        linhas="".join(f"<li><b>{o}</b> — {q}{(' · '+err) if err else ''}</li>" for o,q,err in atrasadas)
+        html=(f"<p>As obras abaixo estão há mais de {DIAS_ALERTA} dias sem extração de CTRs "
+              f"bem-sucedida no SP Regula:</p><ul>{linhas}</ul>"
+              f"<p style='color:#666'>Os dados anteriores dessas obras foram <b>preservados</b> no painel — "
+              f"apenas não houve atualização. Verifique login/senha ou disponibilidade do SP Regula.</p>")
+        _enviar_alerta(f"[Painel de Resíduos] {len(atrasadas)} obra(s) sem extração há +{DIAS_ALERTA} dias", html)
+        print(f"[ALERTA] {len(atrasadas)} obra(s) atrasada(s): "+", ".join(o for o,_,_ in atrasadas))
+    else:
+        print(f"[OK] Nenhuma obra ativa com mais de {DIAS_ALERTA} dias sem extração.")
+
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--dias", type=int, default=30)
@@ -412,6 +483,7 @@ def main():
     print(f"[INFO] {len(obras)} obra(s) ativa(s) | período {desde:%d/%m/%Y} a {ate:%d/%m/%Y}")
 
     todos=[]
+    resultados={}
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=not args.headful)
         import time
@@ -436,11 +508,18 @@ def main():
                 time.sleep(6)
             if not ok:
                 print(f"  [FALHOU] {o['obra']} apos 3 tentativas: {ultimo}")
+            resultados[o['obra']] = {"ok": ok, "erro": ultimo}
             time.sleep(2)
         browser.close()
 
+    # Preserva os dados anteriores: salvar_consolidado só acrescenta/atualiza, nunca zera obras que falharam.
     total=salvar_consolidado(todos, ativas)
     print(f"[OK] +{len(todos)} CTRs nesta rodada | base agora com {total} CTRs")
+    # Registra saúde da extração por obra e avisa se alguma passar de DIAS_ALERTA dias sem sucesso.
+    try:
+        atualizar_estado_e_alertar(resultados, ativas, ate)
+    except Exception as e:
+        print(f"[AVISO] não foi possível atualizar estado/alerta de extração: {e}")
 
 if __name__ == "__main__":
     main()
