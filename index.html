@@ -104,6 +104,7 @@
     <button class="tabbtn masteronly-tab" data-go="carac" style="display:none">Características das obras</button>
     <button class="tabbtn masteronly-tab" data-go="prog" style="display:none">Controle de Programas</button>
     <button class="tabbtn masteronly-tab" data-go="users" style="display:none">Usuários</button>
+    <button class="tabbtn masteronly-tab" data-go="qual" style="display:none">Qualidade dos dados</button>
   </div>
   <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
@@ -151,7 +152,7 @@
       <h3><span class="ttl">Evolução mensal (m³) — etapas construtivas</span>
         <span style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0"><span style="font-size:11px;color:var(--slate)">de</span><input type="month" id="evDe"><span style="font-size:11px;color:var(--slate)">até</span><input type="month" id="evAte"></span>
       </h3>
-      <div class="cwrap"><canvas id="cMes"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por mês, só etapas construtivas, dentro do intervalo de mês (de/até) selecionado.</div>
+      <div class="cwrap"><canvas id="cMes"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por mês, só etapas construtivas, dentro do intervalo de mês (de/até) selecionado. Cada barra é <b>empilhada por etapa da obra</b> (fase da obra na data da CTR): Fundações, Estrutura, Estrutura e Acabamentos, Acabamentos e — em cinza — CTRs sem etapa cadastrada. O total da barra é o volume construtivo do mês.</div>
     </div>
   </div>
 
@@ -255,6 +256,11 @@
     <div id="credsWrap" style="overflow:auto"></div>
     <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button id="btAtualizarTudo" class="btn">Atualizar todas as informações</button></div>
     <div id="credsOut" style="margin-top:14px;display:none"></div>
+  </div>
+  <div class="panel tabpane" data-tab="qual" style="margin-top:16px" id="secQual">
+    <h3><span class="ttl">Qualidade dos dados (Master)</span><button id="btExpQual" class="btn sm" style="background:#8A8F98">Exportar CSV</button></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Aponta o que precisa de correção na fonte: erros no histórico de fases, obras sem estrutura, CTRs sem etapa cadastrada, divergências do SP Regula e volume zerado. Recalculado ao vivo a partir dos dados atuais.</p>
+    <div id="qualWrap"></div>
   </div>
   <div class="foot" id="foot"></div>
   </div>
@@ -378,6 +384,18 @@ function lineChart(id,labels,data){
   charts[id]=new Chart(document.getElementById(id),{type:'line',data:{labels,datasets:[{data,borderColor:'#F07E22',backgroundColor:'rgba(240,126,34,.12)',fill:true,tension:.3,borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${nf(ctx.raw)} m³ (${nf(ctx.raw/tot*100,1)}%)`}}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:10}}}}}});
 }
+// Evolução mensal empilhada por etapa construtiva
+const ET_ORDEM=['Fundações','Estrutura','Estrutura e Acabamentos','Acabamentos','Não informada'];
+const ET_COR={'Fundações':'#2C4E7A','Estrutura':'#3E7CB1','Estrutura e Acabamentos':'#7B61B5','Acabamentos':'#2E9E5B','Não informada':'#B8BEC6'};
+function stackedMonth(id,labels,series){
+  if(charts[id])charts[id].destroy();
+  charts[id]=new Chart(document.getElementById(id),{type:'bar',
+    data:{labels,datasets:series.map(s=>({label:s.label,data:s.data,backgroundColor:s.cor,borderWidth:0,borderRadius:2,stack:'m'}))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:10.5}}},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${nf(ctx.raw)} m³`,footer:items=>'Total: '+nf(items.reduce((a,it)=>a+it.raw,0))+' m³'}}},
+      scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:11}}}}}});
+}
 
 function render(){
   const d=filtrar(); const dc=construtivo(d);
@@ -401,12 +419,13 @@ function render(){
   const so=soma(dc,'obra');
   barPct('cObra',Object.keys(so),Object.values(so).map(v=>+v.toFixed(1)));
 
-  // Evolução mensal (construtivo, com intervalo de mês)
-  const mm={};dc.forEach(r=>{const k=(r.data||'').slice(0,7);if(k)mm[k]=(mm[k]||0)+r.quantidade;});
-  let mk=Object.keys(mm).sort();
+  // Evolução mensal por etapa construtiva (empilhado), com intervalo de mês
+  const mmE={};dc.forEach(r=>{const k=(r.data||'').slice(0,7);if(!k)return;const et=ET_ORDEM.includes(r.etapa)?r.etapa:'Não informada';(mmE[k]=mmE[k]||{})[et]=(mmE[k][et]||0)+r.quantidade;});
+  let mk=Object.keys(mmE).sort();
   const de=document.getElementById('evDe').value,ate=document.getElementById('evAte').value;
   if(de)mk=mk.filter(k=>k>=de); if(ate)mk=mk.filter(k=>k<=ate);
-  lineChart('cMes',mk.map(k=>{const[y,m]=k.split('-');return m+'/'+y.slice(2);}),mk.map(k=>+mm[k].toFixed(1)));
+  const etPresentes=ET_ORDEM.filter(et=>mk.some(k=>mmE[k][et]));
+  stackedMonth('cMes',mk.map(k=>{const[y,m]=k.split('-');return m+'/'+y.slice(2);}),etPresentes.map(et=>({label:et,data:mk.map(k=>+((mmE[k][et]||0)).toFixed(1)),cor:ET_COR[et]})));
 
   const st=soma(d,'transportador');
   barPct('cTransp',Object.keys(st),Object.values(st).map(v=>+v.toFixed(1)),{horiz:true});
@@ -554,7 +573,7 @@ document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&podeSalva
 renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -744,7 +763,73 @@ function atualizarTudo(){var out=document.getElementById("credsOut");out.style.d
 document.addEventListener("click",function(e){if(!e.target)return;if(e.target.id==="btAtualizarTudo")atualizarTudo();if(e.target.id==="btAdd")setTimeout(renderCreds,80);});
 (function(){function load(){if(window._db){try{window._db.collection("painel").doc("credenciais").onSnapshot(function(snap){if(snap.exists&&snap.data().dados){var d=snap.data().dados;Object.keys(d).forEach(function(o){CREDS[o]=Object.assign({},CREDS[o],d[o]);});saveCreds();var w=document.getElementById("credsWrap");if(w&&!w.contains(document.activeElement))renderCreds();}},function(){});}catch(e){}}else{setTimeout(load,1500);}}load();})();
 /* ===== Abas ===== */
-function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } }
+/* ===== Qualidade dos dados (Master) ===== */
+function _qualColeta(){
+  // 1) Erros no histórico de fases + obras sem estrutura
+  const anomalias=[];
+  Object.keys(ATTRS).forEach(o=>{
+    const a=ATTRS[o]||{}; const fases=(a.fases||[]).filter(f=>f.etapa&&f.data);
+    if((+a.area||0)>0 && !a.estrutura) anomalias.push({obra:o,problema:'Sem estrutura definida',detalhe:'não entra no gráfico Orçado × Realizado'});
+    fases.forEach(f=>{
+      if(f.dataFim && f.data>f.dataFim) anomalias.push({obra:o,problema:'Datas de fase invertidas',detalhe:`"${f.etapa}": início ${f.data} depois do fim ${f.dataFim}`});
+      if(f.data>HOJE) anomalias.push({obra:o,problema:'Fase com início no futuro',detalhe:`"${f.etapa}": início ${f.data}`});
+    });
+  });
+  // 2) CTRs sem etapa cadastrada (Não informada)
+  const ni={}; RAW.forEach(r=>{ if(r.data && r.etapa==='Não informada'){ (ni[r.obra]=ni[r.obra]||{n:0,vol:0,min:'9',max:'0'}); ni[r.obra].n++; ni[r.obra].vol+=r.quantidade; if(r.data<ni[r.obra].min)ni[r.obra].min=r.data; if(r.data>ni[r.obra].max)ni[r.obra].max=r.data; } });
+  const niArr=Object.entries(ni).map(([o,v])=>({obra:o,ctrs:v.n,vol:v.vol,periodo:v.min+' a '+v.max})).sort((a,b)=>b.vol-a.vol);
+  // 3) Divergências do SP Regula
+  const dv={}; RAW.forEach(r=>{ if(r.divergencia){ (dv[r.obra]=dv[r.obra]||0); dv[r.obra]++; } });
+  const dvArr=Object.entries(dv).map(([o,n])=>({obra:o,ctrs:n})).sort((a,b)=>b.ctrs-a.ctrs);
+  const dvTot=dvArr.reduce((a,x)=>a+x.ctrs,0);
+  // 4) Volume zerado
+  const zeros=RAW.filter(r=>r.data && (+r.quantidade||0)<=0).map(r=>({obra:r.obra,numero:r.numero||'—',data:r.data,residuo:r.residuo}));
+  return {anomalias,niArr,dvArr,dvTot,zeros};
+}
+function renderQualidade(){
+  const w=document.getElementById('qualWrap'); if(!w) return;
+  const q=_qualColeta();
+  const niTot=q.niArr.reduce((a,x)=>a+x.vol,0);
+  const card=(cor,n,txt)=>`<div style="flex:1;min-width:130px;background:#fff;border:1px solid var(--line);border-top:3px solid ${cor};border-radius:10px;padding:12px 14px"><div style="font-size:24px;font-weight:600;color:${cor}">${n}</div><div style="font-size:11.5px;color:var(--slate);margin-top:4px">${txt}</div></div>`;
+  const sec=(titulo,corpo,vazio)=>`<h3 style="font-size:13px;margin:22px 0 10px"><span class="ttl" style="cursor:default">${titulo}</span></h3>`+(corpo||`<p style="font-size:12.5px;color:var(--slate)">${vazio}</p>`);
+  const tbl=(cols,rows)=>`<div class="tbl-wrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  let html='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
+    card('#C0463B',q.anomalias.length,'erros de cadastro (fases / estrutura)')+
+    card('#E0A423',q.niArr.length,'obras com CTR sem etapa')+
+    card('#E0A423',nf(niTot,0)+' m³','volume sem etapa ("Não informada")')+
+    card('#2C4E7A',q.dvTot,'CTRs com divergência (SP Regula)')+
+    card('#8A8F98',q.zeros.length,'CTRs com volume zerado')+'</div>';
+  // Seção 1
+  html+=sec('Erros de cadastro — corrigir em Características',
+    q.anomalias.length?tbl(['Obra','Problema','Detalhe'],q.anomalias.map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td style="color:var(--red)">${a.problema}</td><td style="color:var(--slate)">${a.detalhe}</td></tr>`).join('')):null,
+    'Nenhum erro de fase ou estrutura encontrado.');
+  // Seção 2
+  html+=sec('CTRs sem etapa cadastrada — ajustar histórico de fases',
+    q.niArr.length?tbl(['Obra','CTRs','Volume (m³)','Período das CTRs órfãs'],q.niArr.map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td>${a.ctrs}</td><td style="font-weight:500">${nf(a.vol,0)}</td><td style="color:var(--slate)">${a.periodo}</td></tr>`).join('')):null,
+    'Todas as CTRs estão dentro de alguma fase cadastrada.');
+  // Seção 3
+  html+=sec(`Recebidas com divergência (SP Regula) — ${q.dvTot} CTRs`,
+    q.dvArr.length?tbl(['Obra','CTRs com divergência'],q.dvArr.map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td>${a.ctrs}</td></tr>`).join('')):null,
+    'Nenhuma CTR marcada com divergência.');
+  // Seção 4
+  html+=sec('CTRs com volume zerado',
+    q.zeros.length?tbl(['Obra','Número','Data','Resíduo'],q.zeros.slice(0,200).map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td>${a.numero}</td><td>${a.data}</td><td style="color:var(--slate)">${a.residuo}</td></tr>`).join('')+(q.zeros.length>200?`<tr><td colspan="4" style="color:var(--slate)">… e mais ${q.zeros.length-200}</td></tr>`:'')):null,
+    'Nenhuma CTR com volume zerado.');
+  w.innerHTML=html;
+  // CSV
+  const bt=document.getElementById('btExpQual');
+  if(bt) bt.onclick=()=>{
+    const linhas=[['tipo','obra','detalhe','valor']];
+    q.anomalias.forEach(a=>linhas.push(['erro_cadastro',a.obra,a.problema+' — '+a.detalhe,'']));
+    q.niArr.forEach(a=>linhas.push(['sem_etapa',a.obra,'CTRs sem etapa ('+a.periodo+')',nf(a.vol,0)+' m3 / '+a.ctrs+' CTRs']));
+    q.dvArr.forEach(a=>linhas.push(['divergencia',a.obra,'CTRs com divergencia SP Regula',a.ctrs]));
+    q.zeros.forEach(a=>linhas.push(['volume_zerado',a.obra,'CTR '+a.numero+' em '+a.data,a.residuo]));
+    const csv='﻿'+linhas.map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='qualidade_dados_'+HOJE+'.csv';a.click();URL.revokeObjectURL(url);
+  };
+}
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
 document.querySelectorAll('.panel h3 .ttl').forEach(t=>{t.addEventListener('click',()=>{const cb=t.closest('.panel').querySelector('.calcbase');if(cb)cb.style.display=cb.style.display==='block'?'none':'block';});});
