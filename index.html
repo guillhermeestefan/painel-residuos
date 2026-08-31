@@ -150,9 +150,9 @@
     <div class="panel"><h3><span class="ttl">Volume por obra (m³) — etapas construtivas</span></h3><div class="cwrap"><canvas id="cObra"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por obra, considerando só as etapas construtivas (exclui Terraplenagem, Limpeza do Terreno, Stand de Vendas - Construção e Demolição).</div></div>
     <div class="panel">
       <h3><span class="ttl">Evolução mensal (m³) — etapas construtivas</span>
-        <span style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0"><span style="font-size:11px;color:var(--slate)">de</span><input type="month" id="evDe"><span style="font-size:11px;color:var(--slate)">até</span><input type="month" id="evAte"></span>
+        <span style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;flex-wrap:wrap"><span style="font-size:11px;color:var(--slate)">obra</span><select id="evObra" class="selmini" style="min-width:170px"></select><span style="font-size:11px;color:var(--slate)">de</span><input type="month" id="evDe"><span style="font-size:11px;color:var(--slate)">até</span><input type="month" id="evAte"></span>
       </h3>
-      <div class="cwrap"><canvas id="cMes"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por mês, só etapas construtivas, dentro do intervalo de mês (de/até) selecionado. Cada barra é <b>empilhada por etapa da obra</b> (fase da obra na data da CTR): Fundações, Estrutura, Estrutura e Acabamentos, Acabamentos e — em cinza — CTRs sem etapa cadastrada. O total da barra é o volume construtivo do mês.</div>
+      <div class="cwrap"><canvas id="cMes"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por mês, só etapas construtivas, dentro do intervalo de mês (de/até) selecionado. Cada barra é <b>empilhada por etapa da obra</b> (fase da obra na data da CTR): Fundações, Estrutura, Estrutura e Acabamentos e Acabamentos. O total da barra é o volume construtivo do mês. CTRs sem etapa cadastrada ("Não informada") ficam de fora — elas aparecem na aba Qualidade dos dados para correção. Use o seletor <b>obra</b> para analisar a evolução de uma obra individual (o mais indicado, já que cada obra está em uma fase diferente no mesmo mês).</div>
     </div>
   </div>
 
@@ -273,6 +273,7 @@ const STATUS_ORDEM=['Pendente Envio','Pendente Recebimento','Em Obra','Em Trâns
 const RES_CLASSE={'Concreto/Argamassa/Alvenaria/Cerâmicos':'A','Solo/Terra':'A','Blocos/Telhas':'A','Madeira':'B','Metal':'B','Papel/Papelão':'B','Plástico':'B','Gesso':'B','Resíduo misturado (sem separação)':'C','Lã de vidro/rocha':'C','Tintas/Solventes/Óleo':'D','Amianto':'D','Lâmpadas/Baterias':'D'};
 const FLUXO=['Limpeza do Terreno','Stand de Vendas - Construção','Fundações','Estrutura','Estrutura e Acabamentos','Acabamentos','Terraplenagem','Stand de Vendas - Demolição'];
 const NAO_CONSTRUTIVAS=new Set(['Terraplenagem','Limpeza do Terreno','Stand de Vendas - Construção','Stand de Vendas - Demolição']);
+const ETAPAS_CONSTRUTIVAS=new Set(['Fundações','Estrutura','Estrutura e Acabamentos','Acabamentos']);
 const ESTRUTURAS=['','Alvenaria estrutural','Concreto armado'];
 const FATOR_ORC={'Alvenaria estrutural':0.2,'Concreto armado':0.22};
 const HOJE=new Date().toISOString().slice(0,10);
@@ -320,6 +321,7 @@ function refreshFiltros(){
   const etapasAll=uniq([...FLUXO,'Não informada',...RAW.map(r=>r.etapa)]);
   opt('fEtapa',etapasAll,'Todas as etapas');
   opt('fTransp',uniq(RAW.map(r=>r.transportador)),'Todos');
+  if(document.getElementById('evObra')) opt('evObra',uniq(RAW.map(r=>r.obra)),'Todas as obras selecionadas');
   const ce=document.getElementById('cmpEtapa');const pv=ce.value;
   ce.innerHTML=`<option value="__all">Só construtivas</option>`+etapasAll.map(v=>`<option>${v}</option>`).join('');
   if(pv&&[...ce.options].some(o=>o.value===pv))ce.value=pv;
@@ -362,7 +364,7 @@ function filtrar(){
     return true;
   });
 }
-const construtivo=arr=>arr.filter(r=>!NAO_CONSTRUTIVAS.has(r.etapa));
+const construtivo=arr=>arr.filter(r=>!NAO_CONSTRUTIVAS.has(r.etapa) && r.etapa!=='Não informada');
 function soma(arr,key){const m={};arr.forEach(r=>m[r[key]]=(m[r[key]]||0)+r.quantidade);return m;}
 function cont(arr,key){const m={};arr.forEach(r=>m[r[key]]=(m[r[key]]||0)+1);return m;}
 
@@ -417,10 +419,12 @@ function render(){
   donutPct('cClasse',['A - reutilizável/reciclável','B - reciclável','C - sem tecnologia','D - perigoso'],[scl.A,scl.B,scl.C,scl.D].map(v=>+v.toFixed(1)),['#3E7CB1','#2E9E5B','#E0A423','#C0463B']);
 
   const so=soma(dc,'obra');
-  barPct('cObra',Object.keys(so),Object.values(so).map(v=>+v.toFixed(1)));
+  barPct('cObra',Object.keys(so),Object.values(so).map(v=>+v.toFixed(1)),{colors:'#F07E22'});
 
-  // Evolução mensal por etapa construtiva (empilhado), com intervalo de mês
-  const mmE={};dc.forEach(r=>{const k=(r.data||'').slice(0,7);if(!k)return;const et=ET_ORDEM.includes(r.etapa)?r.etapa:'Não informada';(mmE[k]=mmE[k]||{})[et]=(mmE[k][et]||0)+r.quantidade;});
+  // Evolução mensal por etapa construtiva (empilhado). Seletor de obra individual sobrepõe o escopo.
+  const evO=document.getElementById('evObra')?document.getElementById('evObra').value:'__all';
+  const baseMes=(evO&&evO!=='__all')?construtivo(RAW.filter(r=>r.obra===evO)):dc;
+  const mmE={};baseMes.forEach(r=>{const k=(r.data||'').slice(0,7);if(!k)return;const et=ET_ORDEM.includes(r.etapa)?r.etapa:'Não informada';(mmE[k]=mmE[k]||{})[et]=(mmE[k][et]||0)+r.quantidade;});
   let mk=Object.keys(mmE).sort();
   const de=document.getElementById('evDe').value,ate=document.getElementById('evAte').value;
   if(de)mk=mk.filter(k=>k>=de); if(ate)mk=mk.filter(k=>k<=ate);
@@ -455,10 +459,10 @@ function render(){
     {label:'Realizado',data:oL.length?real:[0],backgroundColor:oL.length?oCor:['#F07E22'],borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${nf(ctx.raw)} m³`}}},scales:{y:{beginAtZero:true},x:{ticks:{font:{size:10}}}}}});
 
-  document.getElementById('foot').innerHTML='Etapas seguem o histórico de fases de cada obra (Master): ao mudar de fase, a anterior congela e a nova começa do zero. Gráficos de volume por obra, evolução, tipo de resíduo, m³/m² e orçado×realizado desconsideram Terraplenagem, Limpeza do Terreno, Stand de Vendas (Construção e Demolição). Premissa de orçamento: Alvenaria estrutural 0,2 m³/m²; Concreto armado 0,22 m³/m². Percentuais mostrados nos tooltips e legendas.';
+  document.getElementById('foot').innerHTML='Etapas seguem o histórico de fases de cada obra (Master): ao mudar de fase, a anterior congela e a nova começa do zero. Gráficos de volume por obra, evolução, tipo de resíduo, m³/m² e orçado×realizado desconsideram Terraplenagem, Limpeza do Terreno, Stand de Vendas (Construção e Demolição) e CTRs sem etapa cadastrada (Não informada). Premissa de orçamento: Alvenaria estrutural 0,2 m³/m²; Concreto armado 0,22 m³/m². Percentuais mostrados nos tooltips e legendas.';
   if(window.__confReady)renderConf();
 }
-['fEtapa','fPeriodo','fTransp','evDe','evAte','pDe','pAte'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+['fEtapa','fPeriodo','fTransp','evDe','evAte','pDe','pAte','evObra'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('change',render);});
 document.getElementById('rToggle').onclick=()=>{const el=document.getElementById('rChecks');const vis=el.style.display!=='none';el.style.display=vis?'none':'flex';document.getElementById('rToggle').textContent='Tipos de resíduo '+(vis?'▾':'▴');};
 
 // datas padrão do intervalo mensal
@@ -471,7 +475,7 @@ document.querySelectorAll('.scChk').forEach(ch=>ch.addEventListener('change',()=
 const CMP_METRICAS=[['vol','Volume de Entulho (m³)'],['m2','Volume de entulho por área construída (m³ / m²)'],['ctrs','Nº de CTRs']];
 function metricasObra(o){
   const et=document.getElementById('cmpEtapa').value;
-  const rs=RAW.filter(r=>r.obra===o && (et==='__all'? !NAO_CONSTRUTIVAS.has(r.etapa) : r.etapa===et));
+  const rs=RAW.filter(r=>r.obra===o && (et==='__all'? ETAPAS_CONSTRUTIVAS.has(r.etapa) : r.etapa===et));
   const vol=rs.reduce((a,r)=>a+r.quantidade,0);const a=ATTRS[o]||{};
   return {obra:o,vol,ctrs:rs.length,estrutura:a.estrutura||'',area:+a.area||0,m2:a.area?vol/a.area:0};
 }
