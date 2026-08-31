@@ -157,7 +157,7 @@
   </div>
 
   <div class="grid">
-    <div class="panel"><h3><span class="ttl">Resíduos por etapa da obra (m³)</span></h3><div class="cwrap"><canvas id="cEtapa"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) das CTRs por etapa. A etapa de cada CTR vem do histórico de fases da obra (por data) e de regras por tipo de resíduo (solo/inertes → Terraplenagem; demolição → Limpeza do Terreno; stand → Stand de Vendas - Demolição).</div></div>
+    <div class="panel"><h3><span class="ttl">Resíduos por etapa da obra (m³)</span><span style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;letter-spacing:0;flex-wrap:wrap"><span style="font-size:11px;color:var(--slate)">obra</span><select id="etObra" class="selmini" style="min-width:150px"></select><span style="font-size:11px;color:var(--slate)">de</span><input type="month" id="etDe"><span style="font-size:11px;color:var(--slate)">até</span><input type="month" id="etAte"></span></h3><div class="cwrap"><canvas id="cEtapa"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) das CTRs por etapa. A etapa de cada CTR vem do histórico de fases da obra (por data) e de regras por tipo de resíduo (solo/inertes → Terraplenagem; demolição → Limpeza do Terreno; stand → Stand de Vendas - Demolição). Use os seletores <b>obra</b> e <b>de/até</b> para analisar uma obra individual e um período específico.</div></div>
     <div class="panel"><h3><span class="ttl">Por classe (CONAMA 307)</span></h3><div class="cwrap"><canvas id="cClasse"></canvas></div><div class="calcbase"><b>Base de cálculo:</b> soma do volume (m³) por classe CONAMA 307 (A/B/C/D). O percentual é a classe dividida pelo volume total exibido.</div></div>
   </div>
 
@@ -322,6 +322,7 @@ function refreshFiltros(){
   opt('fEtapa',etapasAll,'Todas as etapas');
   opt('fTransp',uniq(RAW.map(r=>r.transportador)),'Todos');
   if(document.getElementById('evObra')) opt('evObra',uniq(RAW.map(r=>r.obra)),'Todas as obras selecionadas');
+  if(document.getElementById('etObra')) opt('etObra',uniq(RAW.map(r=>r.obra)),'Todas as obras selecionadas');
   const ce=document.getElementById('cmpEtapa');const pv=ce.value;
   ce.innerHTML=`<option value="__all">Só construtivas</option>`+etapasAll.map(v=>`<option>${v}</option>`).join('');
   if(pv&&[...ce.options].some(o=>o.value===pv))ce.value=pv;
@@ -413,7 +414,13 @@ function render(){
     ['Recebidas c/ divergência',d.filter(r=>r.divergencia).length]
   ].map(([k,v])=>`<div class="item"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
 
-  const se=soma(d,'etapa');
+  // Resíduos por etapa — com seletor de obra individual e intervalo de mês próprios
+  const etObraV=document.getElementById('etObra')?document.getElementById('etObra').value:'__all';
+  let dEt=(etObraV&&etObraV!=='__all')?RAW.filter(r=>r.obra===etObraV):d;
+  const etDe=document.getElementById('etDe')?document.getElementById('etDe').value:'',etAte=document.getElementById('etAte')?document.getElementById('etAte').value:'';
+  if(etDe)dEt=dEt.filter(r=>(r.data||'').slice(0,7)>=etDe);
+  if(etAte)dEt=dEt.filter(r=>(r.data||'').slice(0,7)<=etAte);
+  const se=soma(dEt,'etapa');
   barPct('cEtapa',Object.keys(se),Object.values(se).map(v=>+v.toFixed(1)),{horiz:true});
   const scl={A:0,B:0,C:0,D:0};d.forEach(r=>scl[r.classe]=(scl[r.classe]||0)+r.quantidade);
   donutPct('cClasse',['A - reutilizável/reciclável','B - reciclável','C - sem tecnologia','D - perigoso'],[scl.A,scl.B,scl.C,scl.D].map(v=>+v.toFixed(1)),['#3E7CB1','#2E9E5B','#E0A423','#C0463B']);
@@ -462,7 +469,7 @@ function render(){
   document.getElementById('foot').innerHTML='Etapas seguem o histórico de fases de cada obra (Master): ao mudar de fase, a anterior congela e a nova começa do zero. Gráficos de volume por obra, evolução, tipo de resíduo, m³/m² e orçado×realizado desconsideram Terraplenagem, Limpeza do Terreno, Stand de Vendas (Construção e Demolição) e CTRs sem etapa cadastrada (Não informada). Premissa de orçamento: Alvenaria estrutural 0,2 m³/m²; Concreto armado 0,22 m³/m². Percentuais mostrados nos tooltips e legendas.';
   if(window.__confReady)renderConf();
 }
-['fEtapa','fPeriodo','fTransp','evDe','evAte','pDe','pAte','evObra'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('change',render);});
+['fEtapa','fPeriodo','fTransp','evDe','evAte','pDe','pAte','evObra','etObra','etDe','etAte'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('change',render);});
 document.getElementById('rToggle').onclick=()=>{const el=document.getElementById('rChecks');const vis=el.style.display!=='none';el.style.display=vis?'none':'flex';document.getElementById('rToggle').textContent='Tipos de resíduo '+(vis?'▾':'▴');};
 
 // datas padrão do intervalo mensal
