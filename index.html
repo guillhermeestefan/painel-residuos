@@ -795,7 +795,16 @@ function _qualColeta(){
   const dvTot=dvArr.reduce((a,x)=>a+x.ctrs,0);
   // 4) Volume zerado
   const zeros=RAW.filter(r=>r.data && (+r.quantidade||0)<=0).map(r=>({obra:r.obra,numero:r.numero||'—',data:r.data,residuo:r.residuo}));
-  return {anomalias,niArr,dvArr,dvTot,zeros};
+  // 5) Fases sobrepostas — datas que se cruzam fazem a CTR cair na etapa errada
+  const ovMap={};
+  Object.keys(ATTRS).forEach(o=>{
+    const fs=((ATTRS[o]&&ATTRS[o].fases)||[]).filter(f=>f.etapa&&f.data).map(f=>({etapa:f.etapa,ini:f.data,fim:f.dataFim||'9999-12-31'}));
+    for(let i=0;i<fs.length;i++)for(let j=i+1;j<fs.length;j++){const a=fs[i],b=fs[j];
+      if(a.ini<=b.fim && b.ini<=a.fim){(ovMap[o]=ovMap[o]||[]).push(`"${a.etapa}" (${a.ini}→${a.fim==='9999-12-31'?'aberto':a.fim}) × "${b.etapa}" (${b.ini}→${b.fim==='9999-12-31'?'aberto':b.fim})`);}
+    }
+  });
+  const overlaps=Object.entries(ovMap).map(([o,pares])=>({obra:o,pares})).sort((a,b)=>b.pares.length-a.pares.length);
+  return {anomalias,niArr,dvArr,dvTot,zeros,overlaps};
 }
 function renderQualidade(){
   const w=document.getElementById('qualWrap'); if(!w) return;
@@ -809,7 +818,8 @@ function renderQualidade(){
     card('#E0A423',q.niArr.length,'obras com CTR sem etapa')+
     card('#E0A423',nf(niTot,0)+' m³','volume sem etapa ("Não informada")')+
     card('#2C4E7A',q.dvTot,'CTRs com divergência (SP Regula)')+
-    card('#8A8F98',q.zeros.length,'CTRs com volume zerado')+'</div>';
+    card('#8A8F98',q.zeros.length,'CTRs com volume zerado')+
+    card('#C0463B',q.overlaps.length,'obras com fases sobrepostas (etapa errada)')+'</div>';
   // Seção 1
   html+=sec('Erros de cadastro — corrigir em Características',
     q.anomalias.length?tbl(['Obra','Problema','Detalhe'],q.anomalias.map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td style="color:var(--red)">${a.problema}</td><td style="color:var(--slate)">${a.detalhe}</td></tr>`).join('')):null,
@@ -822,6 +832,10 @@ function renderQualidade(){
   html+=sec(`Recebidas com divergência (SP Regula) — ${q.dvTot} CTRs`,
     q.dvArr.length?tbl(['Obra','CTRs com divergência'],q.dvArr.map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td>${a.ctrs}</td></tr>`).join('')):null,
     'Nenhuma CTR marcada com divergência.');
+  // Seção 5 — fases sobrepostas
+  html+=sec('Fases sobrepostas — datas que se cruzam (jogam a CTR na etapa errada)',
+    q.overlaps.length?tbl(['Obra','Sobreposições de fase'],q.overlaps.map(a=>`<tr><td style="font-weight:500;vertical-align:top">${a.obra}</td><td style="color:var(--slate)">${a.pares.join('<br>')}</td></tr>`).join('')):null,
+    'Nenhuma fase sobreposta.');
   // Seção 4
   html+=sec('CTRs com volume zerado',
     q.zeros.length?tbl(['Obra','Número','Data','Resíduo'],q.zeros.slice(0,200).map(a=>`<tr><td style="font-weight:500">${a.obra}</td><td>${a.numero}</td><td>${a.data}</td><td style="color:var(--slate)">${a.residuo}</td></tr>`).join('')+(q.zeros.length>200?`<tr><td colspan="4" style="color:var(--slate)">… e mais ${q.zeros.length-200}</td></tr>`:'')):null,
@@ -835,6 +849,7 @@ function renderQualidade(){
     q.niArr.forEach(a=>linhas.push(['sem_etapa',a.obra,'CTRs sem etapa ('+a.periodo+')',nf(a.vol,0)+' m3 / '+a.ctrs+' CTRs']));
     q.dvArr.forEach(a=>linhas.push(['divergencia',a.obra,'CTRs com divergencia SP Regula',a.ctrs]));
     q.zeros.forEach(a=>linhas.push(['volume_zerado',a.obra,'CTR '+a.numero+' em '+a.data,a.residuo]));
+    q.overlaps.forEach(a=>a.pares.forEach(p=>linhas.push(['fases_sobrepostas',a.obra,p,''])));
     const csv='﻿'+linhas.map(l=>l.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);
     const a=document.createElement('a');a.href=url;a.download='qualidade_dados_'+HOJE+'.csv';a.click();URL.revokeObjectURL(url);
