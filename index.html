@@ -622,6 +622,33 @@ document.getElementById('masterBtn').onclick=async ()=>{
   }catch(e){ console.warn('firebase init',e); setMaster(false); }
 })();
 
+/* ===== Travas de validação do cadastro ===== */
+function _brdata(iso){ if(!iso)return ''; const p=iso.split('-'); return p.length===3? p[2]+'/'+p[1]+'/'+p[0] : iso; }
+function validarFases(fases){
+  const erros=[], avisos=[]; const hoje=HOJE;
+  (fases||[]).forEach(f=>{
+    if(f.etapa && !f.data) avisos.push(`A fase "${f.etapa}" está sem data de início — ela só passa a valer depois de preenchida.`);
+    if(f.data && f.dataFim && f.data>f.dataFim) erros.push(`A fase "${f.etapa}" tem início (${_brdata(f.data)}) depois do fim (${_brdata(f.dataFim)}). O início precisa ser anterior ou igual ao fim.`);
+    if(f.data && f.data>hoje) avisos.push(`A fase "${f.etapa}" começa em ${_brdata(f.data)}, no futuro — confirme se a data está certa.`);
+  });
+  const fs=(fases||[]).filter(f=>f.etapa&&f.data).map(f=>({etapa:f.etapa,ini:f.data,fim:f.dataFim||'9999-12-31'}));
+  for(let i=0;i<fs.length;i++)for(let j=i+1;j<fs.length;j++){const a=fs[i],b=fs[j];
+    if(a.ini<=b.fim && b.ini<=a.fim){
+      const ambasConstr = ETAPAS_CONSTRUTIVAS.has(a.etapa) && ETAPAS_CONSTRUTIVAS.has(b.etapa);
+      if(ambasConstr) erros.push(`As fases construtivas "${a.etapa}" e "${b.etapa}" têm datas que se sobrepõem. Uma fase construtiva deve começar só depois que a anterior terminar — senão as CTRs desse período caem na etapa errada.`);
+      else avisos.push(`As fases "${a.etapa}" e "${b.etapa}" se sobrepõem. Costuma ser normal (terraplenagem/limpeza/stand convivem com a obra), mas confirme as datas.`);
+    }
+  }
+  return {erros:[...new Set(erros)], avisos:[...new Set(avisos)]};
+}
+function _pintarMsg(card, r, extra){
+  const box=card.querySelector('.faseMsg'); if(!box)return;
+  let h='';
+  if(r&&r.erros&&r.erros.length) h+='<div style="background:#F8E6E3;border:1px solid #E0A9A2;color:#9A2E24;border-radius:8px;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.5"><b>⚠ Não foi salvo — corrija para não bagunçar a análise:</b><ul style="margin:5px 0 0;padding-left:18px">'+r.erros.map(e=>`<li>${e}</li>`).join('')+'</ul></div>';
+  if(r&&r.avisos&&r.avisos.length) h+='<div style="background:#FBF1DC;border:1px solid #E7C97A;color:#8A6410;border-radius:8px;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.5"><b>Atenção (salvo, mas confira):</b><ul style="margin:5px 0 0;padding-left:18px">'+r.avisos.map(e=>`<li>${e}</li>`).join('')+'</ul></div>';
+  if(extra) h+=extra;
+  box.innerHTML=h;
+}
 /* ===== Características (Master) ===== */
 function renderCarac(){
   const w=document.getElementById('caracWrap');const obras=obrasDoUsuario();
@@ -637,16 +664,26 @@ function renderCarac(){
       </div>
       <div class="lbl" style="margin-bottom:6px">Histórico de fases (etapa + data que entrou nela)</div>
       <div class="fasesList">${fr||'<span style="font-size:12px;color:var(--slate)">Nenhuma fase.</span>'}</div>
-      <button class="btn sm addFase" style="margin-top:6px">+ Adicionar fase</button></div>`;
+      <button class="btn sm addFase" style="margin-top:6px">+ Adicionar fase</button><div class="faseMsg"></div></div>`;
   }).join('');
   w.querySelectorAll('.ocard').forEach(card=>{
     const o=card.dataset.o;const ensure=()=>{ATTRS[o]=ATTRS[o]||{};ATTRS[o].fases=ATTRS[o].fases||[];};
-    const salvarBasico=()=>{ensure();ATTRS[o].area=+card.querySelector('.aArea').value||'';ATTRS[o].estrutura=card.querySelector('.aEstr').value;ATTRS[o].concluida=card.querySelector('.aConcl').checked;saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();};
+    const salvarBasico=()=>{ensure();const area=+card.querySelector('.aArea').value||'';const estr=card.querySelector('.aEstr').value;ATTRS[o].area=area;ATTRS[o].estrutura=estr;ATTRS[o].concluida=card.querySelector('.aConcl').checked;saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();
+      const extra=(area&&!estr)?'<div style="background:#FBF1DC;border:1px solid #E7C97A;color:#8A6410;border-radius:8px;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.5"><b>Atenção:</b> defina a <b>estrutura</b> (Alvenaria estrutural ou Concreto armado) — sem ela a obra não entra no gráfico Orçado × Realizado.</div>':'';
+      _pintarMsg(card, validarFases(ATTRS[o].fases||[]), extra);};
     card.querySelectorAll('.aArea,.aEstr,.aConcl').forEach(el=>el.addEventListener('change',salvarBasico));
-    const salvarFases=()=>{ensure();ATTRS[o].fases=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
+    const salvarFases=()=>{ensure();
+      const novas=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));
+      const r=validarFases(novas); _pintarMsg(card, r);
+      if(r.erros.length) return; // TRAVA: não grava enquanto houver erro impossível
+      ATTRS[o].fases=novas;saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
     card.querySelectorAll('.fEt,.fDt,.fDtF').forEach(el=>el.addEventListener('change',salvarFases));
     card.querySelectorAll('.fRm').forEach(b=>b.addEventListener('click',()=>{ensure();ATTRS[o].fases.splice(+b.closest('[data-i]').dataset.i,1);saveAttrs();recomputeEtapas();refreshFiltros();render();renderCarac();renderCmp();}));
     card.querySelector('.addFase').addEventListener('click',()=>{ensure();ATTRS[o].fases.push({etapa:FLUXO[0],data:''});saveAttrs();renderCarac();});
+    // Mostra os problemas já existentes assim que a aba abre
+    const _area0=+((ATTRS[o]||{}).area)||''; const _estr0=(ATTRS[o]||{}).estrutura||'';
+    const _extra0=(_area0&&!_estr0)?'<div style="background:#FBF1DC;border:1px solid #E7C97A;color:#8A6410;border-radius:8px;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.5"><b>Atenção:</b> defina a <b>estrutura</b> — sem ela a obra não entra no Orçado × Realizado.</div>':'';
+    _pintarMsg(card, validarFases((ATTRS[o]||{}).fases||[]), _extra0);
   });
 }
 document.getElementById('btBaixarCarac').onclick=()=>{const js='window.CARACTERISTICAS = '+JSON.stringify(ATTRS,null,1)+';\n';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([js],{type:'text/javascript'}));a.download='caracteristicas.js';a.click();URL.revokeObjectURL(a.href);};
