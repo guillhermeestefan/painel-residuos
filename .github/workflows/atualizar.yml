@@ -3,7 +3,12 @@ name: Atualizar painel de residuos
 on:
   schedule:
     - cron: "0 10 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: "Reprocessar TUDO desde esta data (dd/mm/aaaa). Deixe vazio para a rotina normal (ultimos 30 dias)."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -28,7 +33,13 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python extrair_ctrs.py --dias 30
+        run: |
+          if [ -n "${{ github.event.inputs.desde }}" ]; then
+            echo "Reprocessamento completo desde ${{ github.event.inputs.desde }}"
+            python extrair_ctrs.py --desde "${{ github.event.inputs.desde }}"
+          else
+            python extrair_ctrs.py --dias 30
+          fi
       - name: Publicar dados atualizados
         run: |
           git config user.name "github-actions"
