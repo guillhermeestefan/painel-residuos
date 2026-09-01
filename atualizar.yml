@@ -3,7 +3,12 @@ name: Atualizar painel de residuos
 on:
   schedule:
     - cron: "0 10 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: "Reprocessar TUDO desde esta data (dd/mm/aaaa). Deixe vazio para a rotina normal (ultimos 30 dias)."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -28,14 +33,24 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python extrair_ctrs.py --dias 30
+        run: |
+          if [ -n "${{ github.event.inputs.desde }}" ]; then
+            echo "Reprocessamento completo desde ${{ github.event.inputs.desde }}"
+            python extrair_ctrs.py --desde "${{ github.event.inputs.desde }}"
+          else
+            python extrair_ctrs.py --dias 30
+          fi
       - name: Publicar dados atualizados
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add dados_ctr.js base_consolidada.json base_consolidada.xlsx estado_extracao.json 2>/dev/null || true
           git commit -m "Atualiza dados CTR" || echo "sem mudancas"
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push && break
+            echo "push falhou (tentativa $i), o repositorio avancou; tentando de novo..."; sleep 5
+          done
       - name: Notificar conformidade e custo (mensal, 2 etapas)
         env:
           MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
@@ -49,4 +64,8 @@ jobs:
         run: |
           git add estado_notificacoes.json 2>/dev/null || true
           git commit -m "Atualiza estado de notificacoes" || echo "sem mudancas"
-          git push || echo "nada a enviar"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push && break
+            echo "push falhou (tentativa $i); tentando de novo..."; sleep 5
+          done
