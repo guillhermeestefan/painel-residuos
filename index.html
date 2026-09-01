@@ -91,6 +91,7 @@
     </div>
     <div class="rightbar">
       <div class="updated">Última atualização<br><b id="lastUpd">—</b></div>
+      <button id="btnRefreshAll" class="master-btn" style="margin-right:8px" title="Recalcula etapas e atualiza todos os gráficos e pendências com os dados atuais">↻ Atualizar dados</button>
       <button id="trocaSenhaBtn" class="master-btn" style="margin-right:8px;display:none">Trocar minha senha</button>
       <button id="loginBtn" class="master-btn" style="margin-right:8px;display:none">Sair</button>
       <button id="masterBtn" class="master-btn" style="display:none">Master</button>
@@ -604,7 +605,7 @@ document.getElementById('masterBtn').onclick=async ()=>{
     firebase.initializeApp(window.FIREBASE_CONFIG);
     window._db=firebase.firestore(); window._auth=firebase.auth();
     window._db.collection('painel').doc('caracteristicas').onSnapshot(snap=>{
-      if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); renderJust(); if(MASTER_ON)renderCarac(); }
+      if(snap.exists&&snap.data().dados){ ATTRS=snap.data().dados; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); renderJust(); if(MASTER_ON){renderCarac(); if(typeof renderQualidade==='function')renderQualidade();} }
     },err=>console.warn('firestore read',err));
     window._db.collection('painel').doc('programas').onSnapshot(snap=>{
       if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); renderConf(); renderJust(); if(MASTER_ON)renderProgMatrix(); }
@@ -676,7 +677,7 @@ function renderCarac(){
       const novas=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));
       const r=validarFases(novas); _pintarMsg(card, r);
       if(r.erros.length) return; // TRAVA: não grava enquanto houver erro impossível
-      ATTRS[o].fases=novas;saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();};
+      ATTRS[o].fases=novas;saveAttrs();recomputeEtapas();refreshFiltros();render();renderCmp();if(typeof renderQualidade==='function')renderQualidade();};
     card.querySelectorAll('.fEt,.fDt,.fDtF').forEach(el=>el.addEventListener('change',salvarFases));
     card.querySelectorAll('.fRm').forEach(b=>b.addEventListener('click',()=>{ensure();ATTRS[o].fases.splice(+b.closest('[data-i]').dataset.i,1);saveAttrs();recomputeEtapas();refreshFiltros();render();renderCarac();renderCmp();}));
     card.querySelector('.addFase').addEventListener('click',()=>{ensure();ATTRS[o].fases.push({etapa:FLUXO[0],data:''});saveAttrs();renderCarac();});
@@ -895,6 +896,25 @@ function renderQualidade(){
 function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
+// Botão "Atualizar dados": recalcula etapas e re-renderiza tudo (gráficos + pendências das abas)
+(function(){ const b=document.getElementById('btnRefreshAll'); if(!b) return;
+  b.onclick=()=>{
+    try{
+      if(typeof recomputeEtapas==='function') recomputeEtapas();
+      if(typeof refreshFiltros==='function') refreshFiltros();
+      if(typeof render==='function') render();
+      if(typeof renderCmp==='function') renderCmp();
+      if(window.__confReady && typeof renderConf==='function') renderConf();
+      if(typeof renderJust==='function') renderJust();
+      if(MASTER_ON){
+        if(typeof renderCarac==='function') renderCarac();
+        if(typeof renderProgMatrix==='function') renderProgMatrix();
+        if(typeof renderQualidade==='function') renderQualidade();
+      }
+    }catch(e){ console.warn('Atualizar dados:', e); }
+    b.textContent='Atualizado ✓'; setTimeout(()=>{b.textContent='↻ Atualizar dados';}, 1600);
+  };
+})();
 document.querySelectorAll('.panel h3 .ttl').forEach(t=>{t.addEventListener('click',()=>{const cb=t.closest('.panel').querySelector('.calcbase');if(cb)cb.style.display=cb.style.display==='block'?'none':'block';});});
 </script>
 </body>
