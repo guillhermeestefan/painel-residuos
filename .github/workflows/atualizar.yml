@@ -9,6 +9,10 @@ on:
         description: "Reprocessar TUDO desde esta data (dd/mm/aaaa). Deixe vazio para a rotina normal (ultimos 30 dias)."
         required: false
         default: ""
+      obras:
+        description: "Rodar apenas estas obras (nomes separados por virgula, ex.: Sumaré,Vila Nova). Vazio = todas."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -33,13 +37,13 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
+          IN_DESDE: ${{ github.event.inputs.desde }}
+          IN_OBRAS: ${{ github.event.inputs.obras }}
         run: |
-          if [ -n "${{ github.event.inputs.desde }}" ]; then
-            echo "Reprocessamento completo desde ${{ github.event.inputs.desde }}"
-            python extrair_ctrs.py --desde "${{ github.event.inputs.desde }}"
-          else
-            python extrair_ctrs.py --dias 30
-          fi
+          if [ -n "$IN_DESDE" ]; then DATEARG=(--desde "$IN_DESDE"); else DATEARG=(--dias 30); fi
+          if [ -n "$IN_OBRAS" ]; then OBRASARG=(--obras "$IN_OBRAS"); else OBRASARG=(); fi
+          echo "Rodando extrair_ctrs.py ${DATEARG[@]} ${OBRASARG[@]}"
+          python extrair_ctrs.py "${DATEARG[@]}" "${OBRASARG[@]}"
       - name: Publicar dados atualizados
         run: |
           git config user.name "github-actions"
