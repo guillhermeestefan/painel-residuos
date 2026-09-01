@@ -46,7 +46,11 @@ jobs:
           git config user.email "actions@github.com"
           git add dados_ctr.js base_consolidada.json base_consolidada.xlsx estado_extracao.json 2>/dev/null || true
           git commit -m "Atualiza dados CTR" || echo "sem mudancas"
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push && break
+            echo "push falhou (tentativa $i), o repositorio avancou; tentando de novo..."; sleep 5
+          done
       - name: Notificar conformidade e custo (mensal, 2 etapas)
         env:
           MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
@@ -60,4 +64,8 @@ jobs:
         run: |
           git add estado_notificacoes.json 2>/dev/null || true
           git commit -m "Atualiza estado de notificacoes" || echo "sem mudancas"
-          git push || echo "nada a enviar"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push && break
+            echo "push falhou (tentativa $i); tentando de novo..."; sleep 5
+          done
