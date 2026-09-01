@@ -466,6 +466,7 @@ def main():
     ap.add_argument("--dias", type=int, default=30)
     ap.add_argument("--desde", help="dd/mm/aaaa")
     ap.add_argument("--headful", action="store_true")
+    ap.add_argument("--obras", default="", help="rodar apenas estas obras (nomes separados por virgula); vazio = todas")
     args=ap.parse_args()
 
     from playwright.sync_api import sync_playwright
@@ -480,7 +481,13 @@ def main():
         desde=ate-timedelta(days=args.dias)
 
     obras, ativas = ler_cadastro()
-    print(f"[INFO] {len(obras)} obra(s) ativa(s) | período {desde:%d/%m/%Y} a {ate:%d/%m/%Y}")
+    if args.obras.strip():
+        alvo = {strip_acc(x) for x in args.obras.split(",") if x.strip()}
+        obras = [o for o in obras if strip_acc(o["obra"]) in alvo]
+        if not obras:
+            sys.exit("[ERRO] Nenhuma das obras informadas em --obras foi encontrada no cadastro ativo.")
+        print(f"[INFO] Filtro --obras: rodando apenas {len(obras)} obra(s): " + ", ".join(o["obra"] for o in obras))
+    print(f"[INFO] {len(obras)} obra(s) a extrair | período {desde:%d/%m/%Y} a {ate:%d/%m/%Y}")
 
     todos=[]
     resultados={}
