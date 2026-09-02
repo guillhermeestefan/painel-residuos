@@ -3,7 +3,13 @@
   "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Antonio Bento": {
-  "erro": "Page.goto: Timeout 45000ms exceeded."
+  "erro": "",
+  "obra": "Antonio Bento",
+  "cnpj": "41647498000166",
+  "numero_cadastro": "84605",
+  "validade": "2028-02-05",
+  "validade_br": "05/02/2028",
+  "atualizado_em": "2026-09-02"
  },
  "Augusta": {
   "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
@@ -18,7 +24,7 @@
   "erro": ""
  },
  "Bento Luiz": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Capitao Cavalcanti": {
   "obra": "Capitao Cavalcanti",
@@ -39,7 +45,7 @@
   "erro": ""
  },
  "Carinás": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Chanés I": {
   "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
@@ -99,13 +105,13 @@
   "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
  },
  "Jurupis": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Liberdade": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Miguel Calfat": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Ministro": {
   "obra": "Ministro",
@@ -183,13 +189,13 @@
   "erro": ""
  },
  "Siqueira Bueno": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Souza Ramos": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Sumaré": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  },
  "Vieira Fazenda": {
   "obra": "Vieira Fazenda",
@@ -201,6 +207,6 @@
   "erro": ""
  },
  "Vila Nova": {
-  "erro": "Page.wait_for_function: Timeout 30000ms exceeded."
+  "erro": "Page.goto: Timeout 45000ms exceeded."
  }
 }
