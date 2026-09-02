@@ -55,6 +55,34 @@ jobs:
             git push && break
             echo "push falhou (tentativa $i), o repositorio avancou; tentando de novo..."; sleep 5
           done
+      - name: Extrair validades dos cadastros (SP Regula, semanal)
+        env:
+          SENHA_SPREGULA: ${{ secrets.SENHA_SPREGULA }}
+          SENHAS_OBRAS: ${{ secrets.SENHAS_OBRAS }}
+          MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
+          MAIL_PORT: ${{ secrets.MAIL_PORT }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          IN_OBRAS: ${{ github.event.inputs.obras }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date +%u)" = "1" ]; then
+            if [ -n "$IN_OBRAS" ]; then python extrair_validades.py --obras "$IN_OBRAS" || echo "validade: etapa falhou, seguindo"; else python extrair_validades.py || echo "validade: etapa falhou, seguindo"; fi
+          else
+            echo "Validade so roda as segundas-feiras (ou em execucao manual). Pulando hoje."
+          fi
+      - name: Publicar validades
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add validades.json validades.js 2>/dev/null || true
+          git commit -m "Atualiza validades dos cadastros" || echo "sem mudancas"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push && break
+            echo "push falhou (tentativa $i); tentando de novo..."; sleep 5
+          done
       - name: Notificar conformidade e custo (mensal, 2 etapas)
         env:
           MAIL_SERVER: ${{ secrets.MAIL_SERVER }}
