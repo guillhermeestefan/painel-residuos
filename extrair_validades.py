@@ -73,9 +73,21 @@ def _iso(br):
 
 def extrair_validade_obra(page, cnpj, senha):
     """Retorna (validade_br, numero_cadastro) ou levanta excecao."""
-    page.goto(PORTAL, wait_until="domcontentloaded", timeout=45000)
+    # O portal cadastros-spregula costuma ser lento/instavel: tenta carregar
+    # a pagina algumas vezes com timeout maior antes de desistir.
+    ultimo = None
+    for tg in range(1, 4):
+        try:
+            page.goto(PORTAL, wait_until="domcontentloaded", timeout=90000)
+            ultimo = None
+            break
+        except Exception as e:
+            ultimo = e
+            page.wait_for_timeout(3000)
+    if ultimo is not None:
+        raise ultimo
     inp = page.locator("input[type=text]").first
-    inp.wait_for(state="visible", timeout=20000)
+    inp.wait_for(state="visible", timeout=30000)
     inp.fill("".join(ch for ch in str(cnpj) if ch.isdigit()))
     if not _clic(page, ["Consultar"]):
         raise RuntimeError("botao Consultar nao encontrado")
@@ -86,9 +98,9 @@ def extrair_validade_obra(page, cnpj, senha):
     pw.fill(str(senha))
     if not _clic(page, ["Confirmar"]):
         raise RuntimeError("botao Confirmar nao encontrado")
-    # aguarda a pagina do cadastro carregar o texto da vigencia
+    # aguarda a pagina do cadastro carregar o texto da vigencia (portal lento)
     page.wait_for_function(
-        "() => /Fim da Vig[eê\\u00ea]ncia/i.test(document.body.innerText)", timeout=30000
+        "() => /Fim da Vig[eê\\u00ea]ncia/i.test(document.body.innerText)", timeout=60000
     )
     txt = page.inner_text("body")
     m = re.search(r"Fim da Vig[eê]ncia\s*:?\s*([0-3]?\d/[01]?\d/\d{4})", txt, re.I)
