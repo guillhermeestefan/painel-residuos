@@ -1,6 +1,6 @@
 {
  "Aimberê": {
-  "falhas_seguidas": 3,
+  "falhas_seguidas": 4,
   "ultimo_erro": "Módulo (Gerador/Obra) não encontrado (login inválido?)",
   "ultimo_sucesso": ""
  },
@@ -40,7 +40,7 @@
   "ultimo_erro": ""
  },
  "Chanés I": {
-  "falhas_seguidas": 3,
+  "falhas_seguidas": 4,
   "ultimo_erro": "Módulo (Gerador/Obra) não encontrado (login inválido?)",
   "ultimo_sucesso": ""
  },
