@@ -37,6 +37,23 @@ def _load_validades():
     return {}
 
 
+def _obras_concluidas():
+    """Retorna o conjunto de nomes (sem acento) marcados como 'concluida' em
+    painel/caracteristicas do Firestore. Falha silenciosa -> conjunto vazio."""
+    try:
+        from checar_conformidade import firestore_get
+        attrs = firestore_get("caracteristicas") or {}
+        out = set()
+        if isinstance(attrs, dict):
+            for nome, a in attrs.items():
+                if isinstance(a, dict) and a.get("concluida"):
+                    out.add(strip_acc(nome))
+        return out
+    except Exception as e:
+        print(f"[AVISO] Nao foi possivel ler obras concluidas: {str(e).splitlines()[0][:80]}")
+        return set()
+
+
 def _clic(page, textos, timeout=10000):
     for t in textos:
         try:
@@ -93,6 +110,15 @@ def main():
     if args.obras.strip():
         alvo = {strip_acc(x) for x in args.obras.split(",") if x.strip()}
         obras = [o for o in obras if strip_acc(o["obra"]) in alvo]
+
+    # Obras marcadas como concluidas ("nao notificar"): nao consulta nem alerta.
+    concluidas = _obras_concluidas()
+    if concluidas:
+        antes = len(obras)
+        obras = [o for o in obras if strip_acc(o["obra"]) not in concluidas]
+        if antes != len(obras):
+            print(f"[INFO] Ignorando {antes - len(obras)} obra(s) concluida(s) (nao notificar).")
+
     print(f"[INFO] Validade: {len(obras)} obra(s) a consultar")
 
     estado = _load_validades()
@@ -149,6 +175,8 @@ def main():
     for nome, reg in estado.items():
         if nome not in ativas or not reg.get("validade"):
             continue
+        if strip_acc(nome) in concluidas:
+            continue  # obra concluida: nao notificar
         try:
             dias = (date.fromisoformat(reg["validade"]) - hoje).days
         except Exception:
