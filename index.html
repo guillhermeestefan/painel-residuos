@@ -12,6 +12,7 @@
 <script src="dados_ctr.js" onerror="/* sem dados ainda */"></script>
 <script src="caracteristicas.js" onerror="/* sem características ainda */"></script>
 <script src="programas-init.js" onerror="/* sem programas ainda */"></script>
+<script src="validades.js" onerror="/* sem validades ainda */"></script>
 <style>
   :root{--orange:#F07E22;--ink:#242A30;--slate:#6A7B8C;--line:#E6EAEE;--bg:#F5F6F8;--card:#FFFFFF;--cream:#FFF4EA;--cream-bd:#F6CFA6;--green:#2E9E5B;--amber:#E0A423;--red:#C0463B;--violet:#7B61B5;--navy2:#2C4E7A;--blue:#3E7CB1;}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -106,6 +107,7 @@
     <button class="tabbtn masteronly-tab" data-go="prog" style="display:none">Controle de Programas</button>
     <button class="tabbtn masteronly-tab" data-go="users" style="display:none">Usuários</button>
     <button class="tabbtn masteronly-tab" data-go="qual" style="display:none">Qualidade dos dados</button>
+    <button class="tabbtn masteronly-tab" data-go="valid" style="display:none">Validade dos cadastros</button>
   </div>
   <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
@@ -257,6 +259,11 @@
     <div id="credsWrap" style="overflow:auto"></div>
     <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button id="btAtualizarTudo" class="btn">Atualizar todas as informações</button></div>
     <div id="credsOut" style="margin-top:14px;display:none"></div>
+  </div>
+  <div class="panel tabpane" data-tab="valid" style="margin-top:16px" id="secValid">
+    <h3><span class="ttl">Validade dos cadastros SP Regula (Master)</span></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Data de "Fim da Vigência" de cada cadastro, extraída do portal do SP Regula. O painel avisa por e-mail 60 dias antes de cada vencimento para você renovar a tempo.</p>
+    <div id="validWrap"></div>
   </div>
   <div class="panel tabpane" data-tab="qual" style="margin-top:16px" id="secQual">
     <h3><span class="ttl">Qualidade dos dados (Master)</span><button id="btExpQual" class="btn sm" style="background:#8A8F98">Exportar CSV</button></h3>
@@ -585,7 +592,7 @@ document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&podeSalva
 renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual','valid'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -893,7 +900,35 @@ function renderQualidade(){
     const a=document.createElement('a');a.href=url;a.download='qualidade_dados_'+HOJE+'.csv';a.click();URL.revokeObjectURL(url);
   };
 }
-function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } }
+/* ===== Validade dos cadastros (Master) ===== */
+function renderValidade(){
+  const w=document.getElementById('validWrap'); if(!w) return;
+  const V=(window.VALIDADES&&typeof window.VALIDADES==='object')?window.VALIDADES:{};
+  const meta=(window.VALIDADES_META&&window.VALIDADES_META.gerado_em)||'—';
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const rows=Object.values(V).filter(r=>r&&r.validade).map(r=>{
+    const d=new Date(r.validade+'T00:00:00'); const dias=Math.round((d-hoje)/86400000);
+    return {obra:r.obra,numero:r.numero_cadastro||'—',br:r.validade_br||r.validade,dias};
+  }).sort((a,b)=>a.dias-b.dias);
+  const semVal=Object.values(V).filter(r=>r&&!r.validade);
+  if(!rows.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Ainda sem validades extraídas — a rotina diária do robô vai preencher. '+(semVal.length?('Sem leitura: '+semVal.map(r=>r.obra).join(', ')):'')+'</p>'; return; }
+  const venc60=rows.filter(r=>r.dias<=60&&r.dias>=0).length;
+  const vencidos=rows.filter(r=>r.dias<0).length;
+  const cor=r=> (r.dias<=60)?'#C0463B': (r.dias<=120)?'#E0A423':'#2E9E5B';
+  const rotulo=r=> r.dias<0?('vencido há '+(-r.dias)+' d'):(r.dias+' dias');
+  const card=(c,n,t)=>'<div style="flex:1;min-width:140px;background:#fff;border:1px solid var(--line);border-top:3px solid '+c+';border-radius:10px;padding:12px 14px"><div style="font-size:24px;font-weight:600;color:'+c+'">'+n+'</div><div style="font-size:11.5px;color:var(--slate);margin-top:4px">'+t+'</div></div>';
+  let html='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+    card('#2C4E7A',rows.length,'cadastros com validade lida')+
+    card('#C0463B',venc60,'vencendo em ≤ 60 dias')+
+    card('#C0463B',vencidos,'já vencidos')+'</div>';
+  html+='<div class="tbl-wrap"><table><thead><tr><th>Obra</th><th>Nº cadastro</th><th>Fim da vigência</th><th>Situação</th></tr></thead><tbody>'+
+    rows.map(r=>'<tr><td style="font-weight:500">'+r.obra+'</td><td>'+r.numero+'</td><td style="font-weight:500">'+r.br+'</td><td><span style="font-size:11px;font-weight:600;color:#fff;background:'+cor(r)+';padding:2px 9px;border-radius:20px">'+rotulo(r)+'</span></td></tr>').join('')+
+    '</tbody></table></div>';
+  if(semVal.length) html+='<p style="font-size:12px;color:var(--slate);margin-top:10px">Sem validade lida ainda: '+semVal.map(r=>r.obra).join(', ')+'.</p>';
+  html+='<div class="foot" style="margin-top:12px">Extraído do portal do SP Regula em '+meta+'. Semáforo: vermelho = vencido ou ≤ 60 dias; amarelo = ≤ 120 dias; verde = acima. O alerta por e-mail dispara 60 dias antes.</div>';
+  w.innerHTML=html;
+}
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
 // Botão "Atualizar dados": recalcula etapas e re-renderiza tudo (gráficos + pendências das abas)
@@ -910,6 +945,7 @@ showTab('painel');
         if(typeof renderCarac==='function') renderCarac();
         if(typeof renderProgMatrix==='function') renderProgMatrix();
         if(typeof renderQualidade==='function') renderQualidade();
+        if(typeof renderValidade==='function') renderValidade();
       }
     }catch(e){ console.warn('Atualizar dados:', e); }
     b.textContent='Atualizado ✓'; setTimeout(()=>{b.textContent='↻ Atualizar dados';}, 1600);
