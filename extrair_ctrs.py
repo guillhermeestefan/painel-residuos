@@ -222,32 +222,61 @@ def extrair_obra(page, obra, desde, ate, downloads_dir):
                   ":is(a,button):has-text('FECHAR')"], timeout=6000, obrig=False)
     page.wait_for_timeout(600)
 
-    clicar(page, ["a:has-text('Relatórios')","text=Relatórios"], timeout=15000)
-    page.wait_for_load_state("networkidle", timeout=60000)
-    clicar(page, ["text=registradas",":is(a,div,span):has-text('registradas')"], timeout=15000)
-    page.wait_for_timeout(1500)
+    # Vai direto para a pagina de relatorios (o menu as vezes nao navega em algumas obras).
+    try:
+        page.goto(SITE + "GG/Relatorio.aspx", wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_load_state("networkidle", timeout=60000)
+    except Exception:
+        clicar(page, ["a:has-text('Relatórios')","text=Relatórios"], timeout=15000, obrig=False)
+        page.wait_for_load_state("networkidle", timeout=60000)
 
     d1 = desde.strftime("%d/%m/%Y"); d2 = ate.strftime("%d/%m/%Y")
-    page.evaluate(
-        """([d1, d2]) => {
-            const q = (suf) => document.querySelector("[id$='"+suf+"']");
-            const set = (suf, v) => { const el = q(suf); if(el){ el.value = v;
-                ['input','change','blur'].forEach(e=>el.dispatchEvent(new Event(e,{bubbles:true}))); } };
-            set('ed_DataInicio', d1); set('ed_DataFim', d2);
-            const tr = q('ddl_Transportador');
-            if (tr) { tr.value = '0'; tr.dispatchEvent(new Event('change',{bubbles:true})); }
-        }""", [d1, d2])
-    page.wait_for_timeout(500)
 
-    with page.expect_download(timeout=120000) as dl_info:
-        if not clicar(page, ["input[id$='bt_Exportar']","input[value*='Exportar' i]"], obrig=False):
-            page.locator("text=EXPORTAR").first.click()
-    download = dl_info.value
+    def _abrir_form_e_filtrar():
+        # abre o relatorio "CTR's registradas" (carrega o formulario com ddl_Transportador)
+        clicar(page, ["text=CTR's registradas","text=registradas",
+                      ":is(a,div,span,h3):has-text('registradas')"], timeout=20000, obrig=False)
+        try:
+            page.wait_for_selector("[id$='ddl_Transportador']", timeout=25000)
+        except Exception:
+            pass
+        page.wait_for_timeout(800)
+        page.evaluate(
+            """([d1, d2]) => {
+                const q = (suf) => document.querySelector("[id$='"+suf+"']");
+                const set = (suf, v) => { const el = q(suf); if(el){ el.value = v;
+                    ['input','change','blur'].forEach(e=>el.dispatchEvent(new Event(e,{bubbles:true}))); } };
+                set('ed_DataInicio', d1); set('ed_DataFim', d2);
+                const tr = q('ddl_Transportador');
+                if (tr) { tr.value = '0'; tr.dispatchEvent(new Event('change',{bubbles:true})); }
+            }""", [d1, d2])
+        page.wait_for_timeout(700)
+
     safe = strip_acc(obra["obra"]).replace(" ","_")[:40] or "obra"
-    sufixo = Path(download.suggested_filename).suffix or ".xls"
-    dest = downloads_dir / f"ctr_{safe}_{ate:%Y%m%d}{sufixo}"
-    download.save_as(str(dest))
-    return dest
+    melhor = None
+    # O SP Regula as vezes devolve um export VAZIO na 1a vez (pagina ainda montando).
+    # Tentamos ate 3x; ficamos com o maior arquivo (mais CTRs). Arquivo < 6 KB = provavelmente vazio.
+    for tent in range(1, 4):
+        _abrir_form_e_filtrar()
+        try:
+            with page.expect_download(timeout=120000) as dl_info:
+                if not clicar(page, ["input[id$='bt_Exportar']","input[value*='Exportar' i]"], obrig=False):
+                    page.locator("text=EXPORTAR").first.click()
+            download = dl_info.value
+            sufixo = Path(download.suggested_filename).suffix or ".xls"
+            dest = downloads_dir / f"ctr_{safe}_t{tent}_{ate:%Y%m%d}{sufixo}"
+            download.save_as(str(dest))
+            tam = dest.stat().st_size
+            if melhor is None or tam > melhor.stat().st_size:
+                melhor = dest
+            if tam >= 6000:   # export com dados; nao precisa repetir
+                break
+        except Exception as e:
+            print(f"[export tent {tent} falhou: {str(e).splitlines()[0][:40]}]", end=" ", flush=True)
+        page.wait_for_timeout(1500)
+    if melhor is None:
+        raise RuntimeError("nao foi possivel exportar o relatorio")
+    return melhor
 
 def _rows_from_df(df):
     return [tuple(df.columns)] + [tuple(r) for r in df.itertuples(index=False, name=None)]
