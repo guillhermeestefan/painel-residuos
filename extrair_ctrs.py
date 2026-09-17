@@ -179,20 +179,41 @@ def clicar(page, seletores, timeout=8000, obrig=True):
 
 def extrair_obra(page, obra, desde, ate, downloads_dir):
     page.goto(SITE, wait_until="domcontentloaded", timeout=60000)
-    page.fill("input[type='text']", obra["cnpj"])
-    page.fill("input[type='password']", obra["senha"])
-    if not clicar(page, ["input[type='submit'][value*='LOGIN' i]",
-                         "input[type='button'][value*='LOGIN' i]",
-                         "button:has-text('Login')"], obrig=False):
-        page.locator("input[type='password']").press("Enter")
-    page.wait_for_load_state("networkidle", timeout=60000)
 
+    # O SP Regula as vezes so entra no 2o clique de Login (a 1a tentativa "engole").
+    # Por isso tentamos logar ate 3x na MESMA pagina antes de desistir.
     achou = False
-    for nome in ("Gerador","Obra"):
-        if clicar(page, [f"text={nome}", f"input[value='{nome}']",
-                         f"input[value*='{nome}' i]",
-                         f":is(a,button,div,span):has-text('{nome}')"], obrig=False):
-            achou = True; break
+    for tent_login in range(1, 4):
+        # se ainda estamos na tela de login (campo senha visivel), preenche e clica de novo
+        try:
+            tem_login = page.locator("input[type='password']").count() > 0
+        except Exception:
+            tem_login = False
+        if tem_login:
+            try:
+                page.fill("input[type='text']", obra["cnpj"])
+                page.fill("input[type='password']", obra["senha"])
+            except Exception:
+                pass
+            if not clicar(page, ["input[type='submit'][value*='LOGIN' i]",
+                                 "input[type='button'][value*='LOGIN' i]",
+                                 "button:has-text('Login')"], obrig=False):
+                try:
+                    page.locator("input[type='password']").press("Enter")
+                except Exception:
+                    pass
+            try:
+                page.wait_for_load_state("networkidle", timeout=60000)
+            except Exception:
+                pass
+        for nome in ("Gerador","Obra"):
+            if clicar(page, [f"text={nome}", f"input[value='{nome}']",
+                             f"input[value*='{nome}' i]",
+                             f":is(a,button,div,span):has-text('{nome}')"], obrig=False):
+                achou = True; break
+        if achou:
+            break
+        page.wait_for_timeout(1500)
     if not achou:
         raise RuntimeError("Módulo (Gerador/Obra) não encontrado (login inválido?)")
     page.wait_for_load_state("networkidle", timeout=60000)
