@@ -1,6 +1,12 @@
 {
  "Aimberê": {
-  "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
+  "erro": "",
+  "obra": "Aimberê",
+  "cnpj": "39874339000152",
+  "numero_cadastro": "66234",
+  "validade": "2026-12-19",
+  "validade_br": "19/12/2026",
+  "atualizado_em": "2026-09-17"
  },
  "Antonio Bento": {
   "erro": "",
