@@ -6,7 +6,7 @@
  },
  "Antonio Bento": {
   "ultimo_sucesso": "2026-09-10",
-  "falhas_seguidas": 7,
+  "falhas_seguidas": 8,
   "ultimo_erro": "Módulo (Gerador/Obra) não encontrado (login inválido?)"
  },
  "Augusta": {
@@ -40,7 +40,7 @@
   "ultimo_erro": ""
  },
  "Chanés I": {
-  "falhas_seguidas": 22,
+  "falhas_seguidas": 23,
   "ultimo_erro": "Módulo (Gerador/Obra) não encontrado (login inválido?)",
   "ultimo_sucesso": ""
  },
