@@ -319,7 +319,7 @@ function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS)
 
 function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava|inerte/.test(r))return 'Terraplenagem'; if(/stand/.test(r))return 'Stand de Vendas - Demolição'; if(/demoli/.test(r))return 'Limpeza do Terreno'; return null;}
 function faseNaData(obra,dataISO){const fs=(ATTRS[obra]&&ATTRS[obra].fases)||[];const ord=fs.filter(f=>f.etapa&&f.data).sort((a,b)=>a.data.localeCompare(b.data));let cur=null;for(const f of ord){if(f.data<=dataISO && (!f.dataFim||dataISO<=f.dataFim))cur=f.etapa;}return cur;}
-function recomputeEtapas(){RAW.forEach(r=>{const esp=etapaEspecial(r.residuo);r.etapa=esp||faseNaData(r.obra,r.data)||r.etapaOrig||'Não informada';});}
+function recomputeEtapas(){RAW.forEach(r=>{const bas=r.tipo_cacamba&&/basculante/i.test(r.tipo_cacamba);const esp=bas?'Terraplenagem':etapaEspecial(r.residuo);r.etapa=esp||faseNaData(r.obra,r.data)||r.etapaOrig||'Não informada';});}
 recomputeEtapas();
 function statusCusto(o,real){const a=ATTRS[o]||{};const area=+a.area||0;const fat=FATOR_ORC[a.estrutura];if(!area||!fat)return 'cinza';const orc=fat*area;if(real>orc)return 'vermelho';const lim=LIM_AMARELO[faseNaData(o,HOJE)];if(lim!=null&&real>=lim*orc)return 'amarelo';return 'verde';}
 

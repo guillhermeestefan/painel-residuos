@@ -10,7 +10,7 @@ Roda na nuvem (GitHub Actions), sem depender do seu computador:
   - execuções seguintes: só o período recente (--dias) e acumula
 """
 
-import argparse, csv, json, os, sys, unicodedata
+import argparse, csv, json, os, sys, unicodedata, shutil
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -398,11 +398,13 @@ def ler_xls_ctr(path, obra):
     c_qtd=col("VolumeRecebido","Capacidade (M3)","volume","quantidade","m3")
     c_dest=col("Destino","destinac"); c_status=col("Status","situacao")
     c_ender=col("Endereco"); c_pgrcc=col("NumeroPGRCC")
+    c_cacamba=col("TipoCacamba","tipo cacamba","cacamba","tbCacamba")
     def cel(r,i): return "" if i is None or i>=len(r) or r[i] is None else str(r[i]).strip()
     regs=[]
     for r in rows[1:]:
         if r is None or all(c is None for c in r): continue
         residuo=cel(r,c_res) or "Não informado"
+        cacamba=cel(r,c_cacamba)
         try:
             qtd=float(str(r[c_qtd]).replace(",",".")) if c_qtd is not None and r[c_qtd] not in (None,"") else 0.0
         except (ValueError,TypeError): qtd=0.0
@@ -411,28 +413,62 @@ def ler_xls_ctr(path, obra):
             p=raw.split()[0].split("/")
             if len(p)==3: data=f"{p[2]}-{p[1].zfill(2)}-{p[0].zfill(2)}"
         st=cel(r,c_status)
+        # Caminhao basculante = carga de terra/terraplenagem, mesmo que o material
+        # venha rotulado como "Concreto Argamassa Alvenaria Ceramicos".
+        if "basculante" in strip_acc(cacamba):
+            etapa = "Terraplenagem"
+        else:
+            etapa = etapa_do_residuo(residuo, obra.get("etapa",""))
         regs.append({"obra":obra["obra"],"numero":cel(r,c_num),
-            "etapa":etapa_do_residuo(residuo,obra.get("etapa","")),
+            "etapa":etapa,
             "residuo":residuo,"classe":classe_de(residuo),
             "transportador":cel(r,c_transp) or "Não informado",
             "quantidade":round(qtd,2),"destino":cel(r,c_dest) or "Não informado",
             "data":data,"status":normaliza_status(st),
             "divergencia":"divergencia" in strip_acc(st) and "sem" not in strip_acc(st),
-            "endereco":cel(r,c_ender),"pgrcc":cel(r,c_pgrcc)})
+            "endereco":cel(r,c_ender),"pgrcc":cel(r,c_pgrcc),
+            "tipo_cacamba":cacamba})
     return regs
 
 def salvar_consolidado(regs_novos, ativas=None):
+    # HISTORICO APPEND-ONLY: a base nunca e apagada por falha de extracao nem por
+    # obra sair da lista de ativas. `ativas` fica so por compatibilidade de
+    # assinatura e NAO e usada para filtrar (o painel continua mostrando o
+    # historico completo, inclusive de obras concluidas/inativas).
     acervo={}
+    base_existente=0
     if BASE_JSON.exists():
         try:
-            for r in json.loads(BASE_JSON.read_text(encoding="utf-8")):
+            anteriores=json.loads(BASE_JSON.read_text(encoding="utf-8"))
+            for r in anteriores:
                 acervo[(r.get("obra"),r.get("numero"))]=r
-        except Exception: pass
+            base_existente=len(anteriores)
+        except Exception as e:
+            # A base existe mas nao pode ser lida (arquivo corrompido/truncado).
+            # NUNCA sobrescrever com dados parciais: preserva o arquivo e aborta.
+            corromp=BASE_JSON.with_suffix(".corrompida.json")
+            try: shutil.copy2(BASE_JSON, corromp)
+            except Exception: pass
+            raise SystemExit(
+                f"[ERRO] base_consolidada.json existe mas nao pode ser lida ({e}). "
+                f"Copia preservada em {corromp.name}. Salvamento abortado para "
+                f"nao perder o historico. Corrija o arquivo e rode de novo.")
     for r in regs_novos:
         acervo[(r.get("obra"),r.get("numero"))]=r
     regs=list(acervo.values())
-    if ativas is not None:
-        regs=[r for r in regs if r.get("obra") in ativas]
+    # Guarda extra: o total nunca pode encolher em relacao ao que ja estava salvo.
+    if len(regs) < base_existente:
+        antes=BASE_JSON.with_suffix(".antes.json")
+        try: shutil.copy2(BASE_JSON, antes)
+        except Exception: pass
+        raise SystemExit(
+            f"[ERRO] o merge resultaria em {len(regs)} registros, menos que os "
+            f"{base_existente} ja salvos. Abortado; base preservada (copia em "
+            f"{antes.name}).")
+    # Backup rotativo de uma rodada antes de gravar por cima.
+    if BASE_JSON.exists():
+        try: shutil.copy2(BASE_JSON, BASE_JSON.with_suffix(".bak.json"))
+        except Exception: pass
     regs=sorted(regs, key=lambda r:(r.get("data",""),r.get("obra","")))
     BASE_JSON.write_text(json.dumps(regs,ensure_ascii=False),encoding="utf-8")
     wb=openpyxl.Workbook(); ws=wb.active; ws.title="CTRs"
