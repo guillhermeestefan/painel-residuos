@@ -6,7 +6,7 @@
   "numero_cadastro": "66234",
   "validade": "2026-12-19",
   "validade_br": "19/12/2026",
-  "atualizado_em": "2026-09-17"
+  "atualizado_em": "2026-09-21"
  },
  "Antonio Bento": {
   "erro": "",
@@ -15,7 +15,7 @@
   "numero_cadastro": "84605",
   "validade": "2028-02-05",
   "validade_br": "05/02/2028",
-  "atualizado_em": "2026-09-17"
+  "atualizado_em": "2026-09-21"
  },
  "Augusta": {
   "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
@@ -26,8 +26,8 @@
   "numero_cadastro": "80664",
   "validade": "2027-09-27",
   "validade_br": "27/09/2027",
-  "atualizado_em": "2026-09-14",
-  "erro": "botao Acessar nao encontrado (CNPJ sem cadastro?)"
+  "atualizado_em": "2026-09-21",
+  "erro": ""
  },
  "Bento Luiz": {
   "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
@@ -38,7 +38,7 @@
   "numero_cadastro": "80526",
   "validade": "2027-09-27",
   "validade_br": "27/09/2027",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Cardoso de Melo": {
@@ -54,7 +54,7 @@
   "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
  },
  "Chanés I": {
-  "erro": "botao Acessar nao encontrado (CNPJ sem cadastro?)"
+  "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
  },
  "Chanes II": {
   "obra": "Chanes II",
@@ -62,7 +62,7 @@
   "numero_cadastro": "56569",
   "validade": "2029-01-26",
   "validade_br": "26/01/2029",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Domício da Gama": {
@@ -86,7 +86,7 @@
   "numero_cadastro": "89550",
   "validade": "2028-07-24",
   "validade_br": "24/07/2028",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Ix Tatuapé": {
@@ -104,7 +104,7 @@
   "numero_cadastro": "81683",
   "validade": "2027-10-22",
   "validade_br": "22/10/2027",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "JK": {
@@ -117,7 +117,7 @@
   "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
  },
  "Miguel Calfat": {
-  "erro": "botao Acessar nao encontrado (CNPJ sem cadastro?)"
+  "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
  },
  "Ministro": {
   "obra": "Ministro",
@@ -134,7 +134,7 @@
   "numero_cadastro": "77315",
   "validade": "2027-08-05",
   "validade_br": "05/08/2027",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Nhambiquaras": {
@@ -146,7 +146,7 @@
   "numero_cadastro": "81531",
   "validade": "2027-10-17",
   "validade_br": "17/10/2027",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Oratorio": {
@@ -155,7 +155,7 @@
   "numero_cadastro": "65148",
   "validade": "2026-10-31",
   "validade_br": "31/10/2026",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Padre Chico": {
@@ -182,7 +182,7 @@
   "numero_cadastro": "84902",
   "validade": "2028-02-28",
   "validade_br": "28/02/2028",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Silvania": {
@@ -191,7 +191,7 @@
   "numero_cadastro": "90041",
   "validade": "2028-08-18",
   "validade_br": "18/08/2028",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Siqueira Bueno": {
@@ -209,7 +209,7 @@
   "numero_cadastro": "85111",
   "validade": "2028-02-28",
   "validade_br": "28/02/2028",
-  "atualizado_em": "2026-09-17",
+  "atualizado_em": "2026-09-21",
   "erro": ""
  },
  "Vila Nova": {
