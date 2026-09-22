@@ -109,6 +109,7 @@
     <button class="tabbtn masteronly-tab" data-go="users" style="display:none">Usuários</button>
     <button class="tabbtn masteronly-tab" data-go="qual" style="display:none">Qualidade dos dados</button>
     <button class="tabbtn masteronly-tab" data-go="valid" style="display:none">Validade dos cadastros</button>
+    <button class="tabbtn masteronly-tab" data-go="forn" style="display:none">Fornecedores</button>
   </div>
   <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
@@ -271,6 +272,11 @@
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Aponta o que precisa de correção na fonte: erros no histórico de fases, obras sem estrutura, CTRs sem etapa cadastrada, divergências do SP Regula e volume zerado. Recalculado ao vivo a partir dos dados atuais.</p>
     <div id="qualWrap"></div>
   </div>
+  <div class="panel tabpane" data-tab="forn" style="margin-top:16px" id="secForn">
+    <h3><span class="ttl">Fornecedores por obra (Master)</span></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Marque quais fornecedores (transportadores) pertencem à obra. Os que você <b>desmarcar</b> saem do entulho construtivo: o entulho deles vai para <b>Stand de Vendas - Demolição</b> e a terra (caçamba basculante) continua em <b>Terraplenagem</b>. Novos fornecedores entram como <b>da obra</b> por padrão. Vale para todos e fica salvo na nuvem.</p>
+    <div id="fornWrap"></div>
+  </div>
   <div class="foot" id="foot"></div>
   </div>
 
@@ -312,14 +318,14 @@ if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:
 let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
 let MASTER_ON=false;
-let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; const PAPEIS={master:'Master',eng:'Engenheiro',visualizador:'Visualizador',adm:'Administrativo',est:'Estagiário',analista_q:'Analista de Qualidade',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
+let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; let FORNST={}; const PAPEIS={master:'Master',eng:'Engenheiro',visualizador:'Visualizador',adm:'Administrativo',est:'Estagiário',analista_q:'Analista de Qualidade',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
 function ehMaster(pp){ return pp==='master'||pp==='gerente_q'||pp==='coord_q'||pp==='gestor_ma'||pp==='analista_q'; }
 function podeSalvarNuvem(){ return (window._auth&&window._auth.currentUser) || (SESSION&&ehMaster(SESSION.papel)); } const TIPOS=[{k:'atraso',nome:'Atraso de programa'},{k:'custo',nome:'Sinal de custo (amarelo/vermelho)'}];
 function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){} if(window._db&&podeSalvarNuvem()){window._db.collection('painel').doc('caracteristicas').set({dados:ATTRS,atualizado:Date.now()}).catch(e=>console.warn('firestore save',e));}}
 
 function etapaEspecial(residuo){const r=strip(residuo); if(/solo|terrapl|escava|inerte/.test(r))return 'Terraplenagem'; if(/stand/.test(r))return 'Stand de Vendas - Demolição'; if(/demoli/.test(r))return 'Limpeza do Terreno'; return null;}
 function faseNaData(obra,dataISO){const fs=(ATTRS[obra]&&ATTRS[obra].fases)||[];const ord=fs.filter(f=>f.etapa&&f.data).sort((a,b)=>a.data.localeCompare(b.data));let cur=null;for(const f of ord){if(f.data<=dataISO && (!f.dataFim||dataISO<=f.dataFim))cur=f.etapa;}return cur;}
-function recomputeEtapas(){RAW.forEach(r=>{const bas=r.tipo_cacamba&&/basculante/i.test(r.tipo_cacamba);const esp=bas?'Terraplenagem':etapaEspecial(r.residuo);r.etapa=esp||faseNaData(r.obra,r.data)||r.etapaOrig||'Não informada';});}
+function recomputeEtapas(){RAW.forEach(r=>{const bas=r.tipo_cacamba&&/basculante/i.test(r.tipo_cacamba);const esp=bas?'Terraplenagem':etapaEspecial(r.residuo);if(esp){r.etapa=esp;return;}const st=FORNST[r.obra];if(st&&r.transportador&&st.indexOf(r.transportador)>=0){r.etapa='Stand de Vendas - Demolição';return;}r.etapa=faseNaData(r.obra,r.data)||r.etapaOrig||'Não informada';});}
 recomputeEtapas();
 function statusCusto(o,real){const a=ATTRS[o]||{};const area=+a.area||0;const fat=FATOR_ORC[a.estrutura];if(!area||!fat)return 'cinza';const orc=fat*area;if(real>orc)return 'vermelho';const lim=LIM_AMARELO[faseNaData(o,HOJE)];if(lim!=null&&real>=lim*orc)return 'amarelo';return 'verde';}
 
@@ -593,7 +599,7 @@ document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&podeSalva
 renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual','valid'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual','valid','forn'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -618,6 +624,10 @@ document.getElementById('masterBtn').onclick=async ()=>{
     window._db.collection('painel').doc('programas').onSnapshot(snap=>{
       if(snap.exists&&snap.data().dados){ PROG=snap.data().dados; renderProgChart(); renderConf(); renderJust(); if(MASTER_ON)renderProgMatrix(); }
     },err=>console.warn('firestore prog',err));
+    window._db.collection('painel').doc('fornecedores').onSnapshot(snap=>{
+      const w=document.getElementById('fornWrap'); if(MASTER_ON&&w&&w.contains(document.activeElement))return;
+      FORNST=(snap.exists&&snap.data().dados)?snap.data().dados:{}; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); if(MASTER_ON&&typeof renderFornecedores==='function')renderFornecedores();
+    },err=>console.warn('firestore forn',err));
     window._db.collection('painel').doc('config').onSnapshot(snap=>{
       if(snap.exists&&snap.data().dados){ CONFIG=snap.data().dados; renderFixos(); }
     },err=>console.warn('firestore config',err));
@@ -956,7 +966,33 @@ function renderValidade(){
   html+='<div class="foot" style="margin-top:12px">Extraído do portal do SP Regula em '+meta+'. Semáforo: vermelho = vencido ou ≤ 60 dias; amarelo = ≤ 120 dias; verde = acima. Obras marcadas como <b>concluídas</b> não aparecem aqui. As <b>pendentes</b> serão relidas na próxima rotina do robô (ou numa reexecução manual). O alerta por e-mail dispara 60 dias antes.</div>';
   w.innerHTML=html;
 }
-function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } }
+function renderFornecedores(){
+  const w=document.getElementById('fornWrap'); if(!w)return;
+  const obras=[...new Set(RAW.map(r=>r.obra).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(!obras.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem dados de CTR carregados ainda.</p>'; return; }
+  let sel=w.__obra||obras[0]; if(obras.indexOf(sel)<0)sel=obras[0]; w.__obra=sel;
+  const recs=RAW.filter(r=>r.obra===sel), agg={};
+  recs.forEach(r=>{ const t=r.transportador||'(sem transportador)'; if(!agg[t])agg[t]={n:0,vol:0,bas:0}; agg[t].n++; agg[t].vol+=(+r.quantidade||0); if(r.tipo_cacamba&&/basculante/i.test(r.tipo_cacamba))agg[t].bas+=(+r.quantidade||0); });
+  const stand=new Set(FORNST[sel]||[]);
+  const forns=Object.keys(agg).sort((a,b)=>agg[b].vol-agg[a].vol);
+  let h='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px"><span style="font-size:12px;color:var(--slate)">Obra</span><select id="fornObra" class="selmini" style="min-width:180px">'+obras.map(o=>'<option'+(o===sel?' selected':'')+'>'+escAttr(o)+'</option>').join('')+'</select><button id="fornMark" class="btn sm" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd)">Marcar todos</button><button id="fornClear" class="btn sm" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd)">Desmarcar todos</button></div>';
+  h+='<table style="border-collapse:collapse;width:100%;font-size:12.5px"><thead><tr style="color:var(--slate)"><th style="padding:8px 6px;text-align:center;font-size:11px;text-transform:uppercase">É da obra?</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Fornecedor</th><th style="padding:8px 6px;text-align:right;font-size:11px;text-transform:uppercase">CTRs</th><th style="padding:8px 6px;text-align:right;font-size:11px;text-transform:uppercase">Volume (m³)</th><th style="padding:8px 6px;text-align:left;font-size:11px;text-transform:uppercase">Se desmarcado, vai p/</th></tr></thead><tbody>';
+  forns.forEach(t=>{ const a=agg[t], isObra=!stand.has(t); const destino=a.bas>0?('Stand + Terraplen. (terra '+Math.round(a.bas)+' m³)'):'Stand de Vendas'; h+='<tr data-t="'+escAttr(t)+'" style="border-top:1px solid var(--line)"><td style="padding:9px 6px;text-align:center"><input type="checkbox" class="fornChk"'+(isObra?' checked':'')+'></td><td style="padding:9px 6px;font-weight:600">'+escAttr(t)+'</td><td style="padding:9px 6px;text-align:right;color:#555">'+a.n+'</td><td style="padding:9px 6px;text-align:right;color:#555">'+a.vol.toLocaleString('pt-BR',{maximumFractionDigits:1})+'</td><td style="padding:9px 6px;color:#8A8F98;font-size:11.5px">'+destino+'</td></tr>'; });
+  h+='</tbody></table><div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button id="fornSave" class="btn">Salvar na nuvem</button><span id="fornMsg" style="font-size:12px;color:var(--slate)"></span></div>';
+  w.innerHTML=h;
+  document.getElementById('fornObra').onchange=e=>{ w.__obra=e.target.value; renderFornecedores(); };
+  document.getElementById('fornMark').onclick=()=>{ w.querySelectorAll('.fornChk').forEach(c=>c.checked=true); };
+  document.getElementById('fornClear').onclick=()=>{ w.querySelectorAll('.fornChk').forEach(c=>c.checked=false); };
+  document.getElementById('fornSave').onclick=()=>{
+    if(!(window._db&&podeSalvarNuvem())){ alert('Entre como Master antes de salvar.'); return; }
+    const naoObra=[]; w.querySelectorAll('tr[data-t]').forEach(tr=>{ const chk=tr.querySelector('.fornChk'); if(chk&&!chk.checked)naoObra.push(tr.dataset.t); });
+    if(naoObra.length)FORNST[sel]=naoObra; else delete FORNST[sel];
+    recomputeEtapas(); refreshFiltros(); render(); renderCmp();
+    const btn=document.getElementById('fornSave'); btn.textContent='Salvando...';
+    window._db.collection('painel').doc('fornecedores').set({dados:FORNST,atualizado:Date.now()}).then(()=>{ btn.textContent='Salvar na nuvem'; const m=document.getElementById('fornMsg'); if(m){ m.textContent='✓ Salvo. '+naoObra.length+' fornecedor(es) fora da obra.'; setTimeout(()=>{m.textContent='';},4000); } }).catch(e=>{ btn.textContent='Salvar na nuvem'; alert('Erro: '+e.message); });
+  };
+}
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
 // Botão "Atualizar dados": recalcula etapas e re-renderiza tudo (gráficos + pendências das abas)
