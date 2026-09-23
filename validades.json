@@ -213,6 +213,6 @@
   "erro": ""
  },
  "Vila Nova": {
-  "erro": "Page.wait_for_function: Timeout 60000ms exceeded."
+  "erro": "Page.wait_for_function: Timeout 90000ms exceeded."
  }
 }
