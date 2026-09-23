@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Gestão de Resíduos — CTR's SP Regula</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -110,6 +111,7 @@
     <button class="tabbtn masteronly-tab" data-go="qual" style="display:none">Qualidade dos dados</button>
     <button class="tabbtn masteronly-tab" data-go="valid" style="display:none">Validade dos cadastros</button>
     <button class="tabbtn masteronly-tab" data-go="forn" style="display:none">Fornecedores</button>
+    <button class="tabbtn masteronly-tab" data-go="carb" style="display:none">Carbono &amp; Energia</button>
   </div>
   <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
@@ -277,6 +279,11 @@
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Marque quais fornecedores (transportadores) pertencem à obra. Os que você <b>desmarcar</b> saem do entulho construtivo: o entulho deles vai para <b>Stand de Vendas - Demolição</b> e a terra (caçamba basculante) continua em <b>Terraplenagem</b>. Novos fornecedores entram como <b>da obra</b> por padrão. Vale para todos e fica salvo na nuvem.</p>
     <div id="fornWrap"></div>
   </div>
+  <div class="panel tabpane" data-tab="carb" style="margin-top:16px" id="secCarb">
+    <h3><span class="ttl">Carbono &amp; Energia — Projetado × Realizado (Master)</span></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Anexe os relatórios do CECarbon de cada obra (um da fase <b>Projeto</b>, outro da fase <b>Obra</b>). O painel lê o PDF e preenche os números; confira/ajuste e salve. O comparativo mostra emissões (tCO₂e) e energia (GJ), no total e por etapa. Os valores ficam salvos na nuvem (o PDF não é armazenado).</p>
+    <div id="carbWrap"></div>
+  </div>
   <div class="foot" id="foot"></div>
   </div>
 
@@ -318,7 +325,9 @@ if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:
 let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
 let MASTER_ON=false;
-let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; let FORNST={}; const PAPEIS={master:'Master',eng:'Engenheiro',visualizador:'Visualizador',adm:'Administrativo',est:'Estagiário',analista_q:'Analista de Qualidade',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
+let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; let FORNST={}; let CARB={};
+try{ if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){}
+const CARB_ETAPAS=["Serviços Preliminares","Fundações","Estrutura","Vedações","Revestimentos (Interno e Externo)","Esquadrias e Vidros","Pintura (Interna e Externa)","Cobertura","Pavimentação e Infraestrutura","Instalações Prediais","Consumo de Energia Elétrica","Consumo de Combustíveis - Geral","Fretes - Geral (Upstream)","Transporte de Resíduos (Downstream)"]; const PAPEIS={master:'Master',eng:'Engenheiro',visualizador:'Visualizador',adm:'Administrativo',est:'Estagiário',analista_q:'Analista de Qualidade',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
 function ehMaster(pp){ return pp==='master'||pp==='gerente_q'||pp==='coord_q'||pp==='gestor_ma'||pp==='analista_q'; }
 function podeSalvarNuvem(){ return (window._auth&&window._auth.currentUser) || (SESSION&&ehMaster(SESSION.papel)); } const TIPOS=[{k:'atraso',nome:'Atraso de programa'},{k:'custo',nome:'Sinal de custo (amarelo/vermelho)'}];
 function saveAttrs(){try{localStorage.setItem('obra_attrs',JSON.stringify(ATTRS));}catch(e){} if(window._db&&podeSalvarNuvem()){window._db.collection('painel').doc('caracteristicas').set({dados:ATTRS,atualizado:Date.now()}).catch(e=>console.warn('firestore save',e));}}
@@ -599,7 +608,7 @@ document.getElementById('btSalvarProg').onclick=()=>{ if(!(window._db&&podeSalva
 renderProgChart(); window.__confReady=true; renderConf(); renderJust();
 
 /* ===== Master ===== */
-function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual','valid','forn'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
+function setMaster(on){MASTER_ON=on;document.querySelectorAll('.masteronly-tab').forEach(el=>el.style.display=on?'':'none'); if(!on && ['carac','prog','users','qual','valid','forn','carb'].includes(window.__tab)) showTab('painel');const b=document.getElementById('masterBtn');b.textContent=on?'Master conectado ✓':'Master';b.style.background=on?'#E6F4EA':'var(--cream)';b.style.color=on?'#217a45':'var(--orange)';b.style.borderColor=on?'#B7E0C4':'var(--cream-bd)';if(on){aplicarEscopo();renderCarac();renderProgMatrix();renderAcessos();render();renderCmp();}}
 document.getElementById('masterBtn').onclick=async ()=>{
   if(window._auth){
     if(window._auth.currentUser){ await window._auth.signOut(); return; }
@@ -628,6 +637,10 @@ document.getElementById('masterBtn').onclick=async ()=>{
       const w=document.getElementById('fornWrap'); if(MASTER_ON&&w&&w.contains(document.activeElement))return;
       FORNST=(snap.exists&&snap.data().dados)?snap.data().dados:{}; recomputeEtapas(); refreshFiltros(); render(); renderCmp(); if(MASTER_ON&&typeof renderFornecedores==='function')renderFornecedores();
     },err=>console.warn('firestore forn',err));
+    window._db.collection('painel').doc('carbono').onSnapshot(snap=>{
+      const w=document.getElementById('carbWrap'); if(MASTER_ON&&w&&w.contains(document.activeElement))return;
+      CARB=(snap.exists&&snap.data().dados)?snap.data().dados:{}; if(MASTER_ON&&window.__tab==='carb'&&typeof renderCarbono==='function')renderCarbono();
+    },err=>console.warn('firestore carb',err));
     window._db.collection('painel').doc('config').onSnapshot(snap=>{
       if(snap.exists&&snap.data().dados){ CONFIG=snap.data().dados; renderFixos(); }
     },err=>console.warn('firestore config',err));
@@ -992,7 +1005,124 @@ function renderFornecedores(){
     window._db.collection('painel').doc('fornecedores').set({dados:FORNST,atualizado:Date.now()}).then(()=>{ btn.textContent='Salvar na nuvem'; const m=document.getElementById('fornMsg'); if(m){ m.textContent='✓ Salvo. '+naoObra.length+' fornecedor(es) fora da obra.'; setTimeout(()=>{m.textContent='';},4000); } }).catch(e=>{ btn.textContent='Salvar na nuvem'; alert('Erro: '+e.message); });
   };
 }
-function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } }
+async function parseCarbonPDF(file){
+  if(!window.pdfjsLib) throw new Error('leitor de PDF não carregou');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let items=[], fullText='';
+  for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const tc=await pg.getTextContent();
+    tc.items.forEach(it=>{ if(!it.str)return; items.push({s:it.str,x:it.transform[4],y:it.transform[5],p:i}); fullText+=it.str+' '; }); }
+  const norm=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  const nt=norm(fullText);
+  let fase=null; if(nt.includes('etapa: projeto'))fase='projeto'; else if(nt.includes('etapa: obra'))fase='obra';
+  const pnum=s=>{ s=(s||'').trim(); if(!/^\d{1,3}(\.\d{3})*,\d+$/.test(s)&&!/^\d+,\d+$/.test(s))return null; return parseFloat(s.replace(/\./g,'').replace(',','.')); };
+  let area=null,m=fullText.match(/rea Total a Construir[^:]*:\s*([0-9.,]+)/i);
+  if(m){ const a=m[1]; area=a.indexOf(',')>=0?parseFloat(a.replace(/\./g,'').replace(',','.')):parseFloat(a); }
+  let emitido=null; m=fullText.match(/emitido em (\d{2}\/\d{2}\/\d{4})/i); if(m)emitido=m[1];
+  const decs=[]; items.filter(it=>it.p===1).forEach(it=>{ const v=pnum(it.s); if(v!==null&&Math.abs(v-163.14)>0.01)decs.push({v:v,x:it.x,y:it.y}); });
+  decs.sort((a,b)=> (b.y-a.y)||(a.x-b.x));
+  const tot={emis:decs[0]?decs[0].v:null, ener:decs[1]?decs[1].v:null, indEmis:decs[2]?decs[2].v:null, indEner:decs[3]?decs[3].v:null};
+  const numItems=items.map(it=>({p:it.p,x:it.x,y:it.y,v:pnum(it.s)})).filter(it=>it.v!==null);
+  const rowsMap={}; items.forEach(it=>{ const k=it.p+':'+Math.round(it.y/3); (rowsMap[k]=rowsMap[k]||[]).push(it); });
+  const textRows=Object.values(rowsMap).map(arr=>{ const left=arr.filter(a=>a.x<215).sort((a,b)=>a.x-b.x); const y=arr.reduce((s,a)=>s+a.y,0)/arr.length; return {p:arr[0].p,y:y,leftText:left.map(a=>a.s).join(' ').replace(/\s+/g,' ').trim()}; });
+  const etapas={};
+  CARB_ETAPAS.forEach(et=>{ const ne=norm(et);
+    const matchRows=textRows.filter(r=>{ const lt=norm(r.leftText); return lt.length>=5 && (ne.startsWith(lt)||lt.startsWith(ne)); });
+    let best=null;
+    matchRows.forEach(r=>{ const mj=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8&&n.x>=330&&n.x<440).sort((a,b)=>b.v-a.v)[0]; const tc=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8&&n.x>=440).sort((a,b)=>b.v-a.v)[0]; if(mj&&tc&&(!best||mj.v>best.mj))best={mj:mj.v,tco2e:tc.v}; });
+    if(best)etapas[et]={tco2e:best.tco2e,mj:best.mj};
+  });
+  return {fase:fase,area:area,emitido:emitido,emis:tot.emis,ener:tot.ener,indEmis:tot.indEmis,indEner:tot.indEner,etapas:etapas};
+}
+function _carbFmt(n,d){ if(n===null||n===undefined||isNaN(n))return '—'; return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function _carbInp(id,val,step){ return '<input id="'+id+'" type="number" step="'+(step||'0.01')+'" value="'+(val!=null&&!isNaN(val)?val:'')+'" style="width:105px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px">'; }
+function _carbSet(id,v){ const el=document.getElementById(id); if(el&&v!=null&&!isNaN(v))el.value=v; }
+function _carbVal(id){ const el=document.getElementById(id); if(!el||el.value==='')return null; const v=parseFloat(el.value); return isNaN(v)?null:v; }
+function _carbFill(fase,r){
+  _carbSet('carb_'+fase+'_area',r.area); _carbSet('carb_'+fase+'_emis',r.emis); _carbSet('carb_'+fase+'_ener',r.ener);
+  _carbSet('carb_'+fase+'_indEmis',r.indEmis); _carbSet('carb_'+fase+'_indEner',r.indEner);
+  CARB_ETAPAS.forEach((et,i)=>{ const ev=r.etapas[et]; if(ev){ _carbSet('carb_'+fase+'_et'+i+'_t',ev.tco2e); _carbSet('carb_'+fase+'_et'+i+'_m',ev.mj); } });
+  const stat=document.getElementById('carbStat_'+fase); if(r.emitido&&stat)stat.dataset.emitido=r.emitido;
+}
+function _carbCollect(obra){
+  const out={};
+  ['projeto','obra'].forEach(fase=>{
+    const D={area:_carbVal('carb_'+fase+'_area'),emis:_carbVal('carb_'+fase+'_emis'),ener:_carbVal('carb_'+fase+'_ener'),indEmis:_carbVal('carb_'+fase+'_indEmis'),indEner:_carbVal('carb_'+fase+'_indEner'),etapas:{}};
+    const stat=document.getElementById('carbStat_'+fase); const prev=(CARB[obra]||{})[fase]||{};
+    D.emitido=(stat&&stat.dataset.emitido)||prev.emitido||'';
+    CARB_ETAPAS.forEach((et,i)=>{ const t=_carbVal('carb_'+fase+'_et'+i+'_t'), mm=_carbVal('carb_'+fase+'_et'+i+'_m'); if(t!=null||mm!=null)D.etapas[et]={tco2e:t,mj:mm}; });
+    out[fase]=D;
+  });
+  return out;
+}
+let _carbCharts=[];
+function _carbDestroy(){ _carbCharts.forEach(c=>{try{c.destroy()}catch(e){}}); _carbCharts=[]; }
+function renderCarbComp(obra){
+  const el=document.getElementById('carbComp'); if(!el)return; _carbDestroy();
+  const d=CARB[obra]; if(!d||(!d.projeto&&!d.obra)){ el.innerHTML=''; return; }
+  const P=d.projeto||{etapas:{}}, O=d.obra||{etapas:{}};
+  const dpct=(p,o)=> (p&&o&&p!=0)?((o-p)/p*100):null;
+  const tile=(t,pv,ov,un,dec)=>{ const dp=dpct(pv,ov); const cor=dp==null?'var(--slate)':(dp>0?'#B23A2E':'#217a45'); const seta=dp==null?'':(dp>0?'▲':'▼');
+    return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;min-width:170px;flex:1"><div style="font-size:11px;color:var(--slate);text-transform:uppercase;letter-spacing:.3px">'+t+'</div><div style="display:flex;gap:14px;align-items:baseline;margin-top:6px"><div><div style="font-size:10px;color:var(--slate)">Projeto</div><div style="font-size:16px;font-weight:600">'+_carbFmt(pv,dec)+'</div></div><div><div style="font-size:10px;color:var(--slate)">Obra</div><div style="font-size:16px;font-weight:600">'+_carbFmt(ov,dec)+'</div></div><div style="color:'+cor+';font-weight:600;font-size:13px">'+seta+' '+(dp==null?'—':(dp>0?'+':'')+_carbFmt(dp,1)+'%')+'</div></div><div style="font-size:10px;color:var(--slate);margin-top:2px">'+un+'</div></div>'; };
+  let h='<h3 style="font-size:14px;margin:0 0 10px">Comparativo — '+escAttr(obra)+'</h3>';
+  h+='<div style="display:flex;gap:12px;flex-wrap:wrap">'+tile('Emissões totais',P.emis,O.emis,'tCO₂e',1)+tile('Energia total',P.ener,O.ener,'GJ',1)+tile('Ind. emissões',P.indEmis,O.indEmis,'tCO₂e/m²',3)+tile('Ind. energia',P.indEner,O.indEner,'GJ/m²',2)+'</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px"><div style="height:360px"><canvas id="carbChEmis"></canvas></div><div style="height:360px"><canvas id="carbChEner"></canvas></div></div>';
+  el.innerHTML=h;
+  const labels=CARB_ETAPAS.filter(et=>(P.etapas&&P.etapas[et])||(O.etapas&&O.etapas[et]));
+  const g=(src,et,k)=>(src.etapas&&src.etapas[et]&&src.etapas[et][k])||0;
+  const mk=(cid,t,pd,od)=>{ const ctx=document.getElementById(cid); if(!ctx||!window.Chart)return; _carbCharts.push(new Chart(ctx,{type:'bar',data:{labels:labels,datasets:[{label:'Projeto',data:pd,backgroundColor:'#CDB79E'},{label:'Obra',data:od,backgroundColor:'#E8792B'}]},options:{maintainAspectRatio:false,plugins:{title:{display:true,text:t}},scales:{x:{ticks:{font:{size:9},autoSkip:false,maxRotation:60,minRotation:45}},y:{beginAtZero:true}}}})); };
+  mk('carbChEmis','Emissões por etapa (tCO₂e)',labels.map(et=>g(P,et,'tco2e')),labels.map(et=>g(O,et,'tco2e')));
+  mk('carbChEner','Energia por etapa (MJ)',labels.map(et=>g(P,et,'mj')),labels.map(et=>g(O,et,'mj')));
+}
+function renderCarbono(){
+  const w=document.getElementById('carbWrap'); if(!w)return;
+  const obras=[...new Set([...RAW.map(r=>r.obra),...Object.keys(CARB)].filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  if(!obras.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem obras carregadas ainda.</p>'; return; }
+  let sel=w.__obra||obras[0]; if(obras.indexOf(sel)<0)sel=obras[0]; w.__obra=sel;
+  const dados=CARB[sel]||{};
+  const pdfok=!!window.pdfjsLib;
+  let h='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span style="font-size:12px;color:var(--slate)">Obra</span><select id="carbObra" class="selmini" style="min-width:180px">'+obras.map(o=>'<option'+(o===sel?' selected':'')+'>'+escAttr(o)+'</option>').join('')+'</select></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+  ['projeto','obra'].forEach(fase=>{
+    const D=dados[fase]||{etapas:{}}; const titulo=fase==='projeto'?'Projeto':'Obra concluída';
+    h+='<div style="border:1px solid var(--line);border-radius:10px;padding:12px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:13px">'+titulo+'</b>'+(D.emitido?'<span style="font-size:11px;color:var(--slate)">emitido '+escAttr(D.emitido)+'</span>':'')+'</div>';
+    h+='<label class="btn sm" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd);cursor:'+(pdfok?'pointer':'not-allowed')+'">'+(pdfok?'Anexar PDF':'Leitor indisponível')+'<input type="file" accept="application/pdf" id="carbFile_'+fase+'" style="display:none"'+(pdfok?'':' disabled')+'></label> <span id="carbStat_'+fase+'" style="font-size:11.5px;color:var(--slate)"'+(D.emitido?' data-emitido="'+escAttr(D.emitido)+'"':'')+'></span>';
+    h+='<div style="margin-top:10px;display:grid;grid-template-columns:auto auto;gap:6px 8px;align-items:center;font-size:12px">';
+    h+='<span>Área (m²)</span>'+_carbInp('carb_'+fase+'_area',D.area,'0.01');
+    h+='<span>Emissões (tCO₂e)</span>'+_carbInp('carb_'+fase+'_emis',D.emis,'0.01');
+    h+='<span>Energia (GJ)</span>'+_carbInp('carb_'+fase+'_ener',D.ener,'0.01');
+    h+='<span>Ind. emissões (tCO₂e/m²)</span>'+_carbInp('carb_'+fase+'_indEmis',D.indEmis,'0.0001');
+    h+='<span>Ind. energia (GJ/m²)</span>'+_carbInp('carb_'+fase+'_indEner',D.indEner,'0.0001');
+    h+='</div>';
+    h+='<div style="margin-top:10px;max-height:280px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr style="color:var(--slate)"><th style="text-align:left;padding:4px">Etapa</th><th style="padding:4px">tCO₂e</th><th style="padding:4px">MJ</th></tr></thead><tbody>';
+    CARB_ETAPAS.forEach((et,i)=>{ const ev=(D.etapas&&D.etapas[et])||{}; h+='<tr><td style="padding:3px 4px;color:#555">'+et+'</td><td style="padding:3px 4px">'+_carbInp('carb_'+fase+'_et'+i+'_t',ev.tco2e,'0.01')+'</td><td style="padding:3px 4px">'+_carbInp('carb_'+fase+'_et'+i+'_m',ev.mj,'0.01')+'</td></tr>'; });
+    h+='</tbody></table></div></div>';
+  });
+  h+='</div>';
+  h+='<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button id="carbSave" class="btn">Salvar na nuvem</button><span id="carbMsg" style="font-size:12px;color:var(--slate)"></span></div>';
+  h+='<div id="carbComp" style="margin-top:22px"></div>';
+  w.innerHTML=h;
+  document.getElementById('carbObra').onchange=e=>{ w.__obra=e.target.value; renderCarbono(); };
+  ['projeto','obra'].forEach(fase=>{
+    const fi=document.getElementById('carbFile_'+fase); if(!fi)return;
+    fi.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; const st=document.getElementById('carbStat_'+fase); st.textContent='Lendo PDF...';
+      try{ const r=await parseCarbonPDF(f);
+        _carbFill(fase,r);
+        if(r.fase&&r.fase!==fase) st.textContent='⚠ Parece ser da fase "'+(r.fase==='projeto'?'Projeto':'Obra')+'". Confira.';
+        else st.textContent='✓ Lido — confira os números e salve.';
+      }catch(err){ st.textContent='Não consegui ler: '+err.message; }
+    };
+  });
+  document.getElementById('carbSave').onclick=()=>{
+    if(!(window._db&&podeSalvarNuvem())){ alert('Entre como Master antes de salvar.'); return; }
+    CARB[sel]=_carbCollect(sel);
+    const b=document.getElementById('carbSave'); b.textContent='Salvando...';
+    window._db.collection('painel').doc('carbono').set({dados:CARB,atualizado:Date.now()}).then(()=>{ b.textContent='Salvar na nuvem'; const mm=document.getElementById('carbMsg'); if(mm){mm.textContent='✓ Salvo na nuvem.'; setTimeout(()=>{mm.textContent='';},3000);} renderCarbComp(sel); }).catch(e=>{ b.textContent='Salvar na nuvem'; alert('Erro: '+e.message); });
+  };
+  renderCarbComp(sel);
+}
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } else if(name==='carb'){ if(MASTER_ON)renderCarbono(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
 // Botão "Atualizar dados": recalcula etapas e re-renderiza tudo (gráficos + pendências das abas)
