@@ -111,7 +111,7 @@
     <button class="tabbtn masteronly-tab" data-go="qual" style="display:none">Qualidade dos dados</button>
     <button class="tabbtn masteronly-tab" data-go="valid" style="display:none">Validade dos cadastros</button>
     <button class="tabbtn masteronly-tab" data-go="forn" style="display:none">Fornecedores</button>
-    <button class="tabbtn masteronly-tab" data-go="carb" style="display:none">Carbono &amp; Energia</button>
+    <button class="tabbtn masteronly-tab" data-go="carb" style="display:none">CECARBON</button>
   </div>
   <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
@@ -1019,20 +1019,38 @@ async function parseCarbonPDF(file){
   let area=null,m=fullText.match(/rea Total a Construir[^:]*:\s*([0-9.,]+)/i);
   if(m){ const a=m[1]; area=a.indexOf(',')>=0?parseFloat(a.replace(/\./g,'').replace(',','.')):parseFloat(a); }
   let emitido=null; m=fullText.match(/emitido em (\d{2}\/\d{2}\/\d{4})/i); if(m)emitido=m[1];
-  const decs=[]; items.filter(it=>it.p===1).forEach(it=>{ const v=pnum(it.s); if(v!==null&&Math.abs(v-163.14)>0.01)decs.push({v:v,x:it.x,y:it.y}); });
-  decs.sort((a,b)=> (b.y-a.y)||(a.x-b.x));
-  const tot={emis:decs[0]?decs[0].v:null, ener:decs[1]?decs[1].v:null, indEmis:decs[2]?decs[2].v:null, indEner:decs[3]?decs[3].v:null};
   const numItems=items.map(it=>({p:it.p,x:it.x,y:it.y,v:pnum(it.s)})).filter(it=>it.v!==null);
   const rowsMap={}; items.forEach(it=>{ const k=it.p+':'+Math.round(it.y/3); (rowsMap[k]=rowsMap[k]||[]).push(it); });
   const textRows=Object.values(rowsMap).map(arr=>{ const left=arr.filter(a=>a.x<215).sort((a,b)=>a.x-b.x); const y=arr.reduce((s,a)=>s+a.y,0)/arr.length; return {p:arr[0].p,y:y,leftText:left.map(a=>a.s).join(' ').replace(/\s+/g,' ').trim()}; });
-  const etapas={};
-  CARB_ETAPAS.forEach(et=>{ const ne=norm(et);
-    const matchRows=textRows.filter(r=>{ const lt=norm(r.leftText); return lt.length>=5 && (ne.startsWith(lt)||lt.startsWith(ne)); });
-    let best=null;
-    matchRows.forEach(r=>{ const mj=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8&&n.x>=330&&n.x<440).sort((a,b)=>b.v-a.v)[0]; const tc=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8&&n.x>=440).sort((a,b)=>b.v-a.v)[0]; if(mj&&tc&&(!best||mj.v>best.mj))best={mj:mj.v,tco2e:tc.v}; });
-    if(best)etapas[et]={tco2e:best.tco2e,mj:best.mj};
+  // Para cada etapa, acha a LINHA da tabela (a que tem o maior número) e reduz a 1 número por coluna x (máx, ignora %).
+  const rowsdata=[];
+  CARB_ETAPAS.forEach(et=>{ const ne=norm(et); let best=null;
+    textRows.forEach(r=>{ const lt=norm(r.leftText); if(lt.length>=5 && (ne.startsWith(lt)||lt.startsWith(ne))){
+      const nums=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8);
+      const mx=nums.reduce((a,n)=>Math.max(a,n.v),0);
+      if(nums.length&&(!best||mx>best.mx))best={mx:mx,nums:nums};
+    }});
+    if(best){ const buck={}; best.nums.forEach(n=>{ const k=Math.round(n.x/15); if(!buck[k]||n.v>buck[k].v)buck[k]=n; }); rowsdata.push({et:et,ns:Object.keys(buck).map(k=>buck[k])}); }
   });
-  return {fase:fase,area:area,emitido:emitido,emis:tot.emis,ener:tot.ener,indEmis:tot.indEmis,indEner:tot.indEner,etapas:etapas};
+  // Colunas identificadas por posição x (independe do layout: 1ª e 2ª edição têm ordens diferentes).
+  const allx=[]; rowsdata.forEach(rd=>rd.ns.forEach(n=>allx.push(n.x))); allx.sort((a,b)=>a-b);
+  const cols=[]; if(allx.length){ let cur=[allx[0]]; for(let i=1;i<allx.length;i++){ if(allx[i]-cur[cur.length-1]<=40)cur.push(allx[i]); else{cols.push(cur);cur=[allx[i]];} } cols.push(cur); }
+  const colR=cols.map(g=>[Math.min.apply(null,g)-20,Math.max.apply(null,g)+20]);
+  const colSum=colR.map(()=>0);
+  rowsdata.forEach(rd=>rd.ns.forEach(n=>{ colR.forEach((r,ci)=>{ if(n.x>=r[0]&&n.x<=r[1])colSum[ci]+=n.v; }); }));
+  // MJ = coluna de maior soma (milhões); tCO2e = a próxima maior; a menor é biogênica (descartada).
+  const order=colR.map((_,i)=>i).sort((a,b)=>colSum[b]-colSum[a]);
+  const mjCol=order.length?order[0]:-1, tcCol=order.length>1?order[1]:-1;
+  const etapas={};
+  rowsdata.forEach(rd=>{ let tc=null,mj=null; rd.ns.forEach(n=>{ colR.forEach((r,ci)=>{ if(n.x>=r[0]&&n.x<=r[1]){ if(ci===mjCol)mj=n.v; else if(ci===tcCol)tc=n.v; } }); }); if(tc!=null||mj!=null)etapas[rd.et]={tco2e:tc,mj:mj}; });
+  // Totais: usa a página 1 quando ela traz os 4 números; senão (1ª edição, faixa vetorizada) deriva das etapas.
+  const decs=[]; numItems.filter(n=>n.p===1).forEach(n=>{ if(Math.abs(n.v-163.14)>0.01)decs.push(n); });
+  decs.sort((a,b)=>(b.y-a.y)||(a.x-b.x));
+  let emis,ener,indEmis,indEner;
+  if(decs.length>=4){ emis=decs[0].v; ener=decs[1].v; indEmis=decs[2].v; indEner=decs[3].v; }
+  else { let se=0,sm=0; for(const k in etapas){ if(etapas[k].tco2e)se+=etapas[k].tco2e; if(etapas[k].mj)sm+=etapas[k].mj; }
+    emis=Math.round(se*100)/100; ener=Math.round(sm/1000*100)/100; indEmis=area?Math.round(emis/area*10000)/10000:null; indEner=area?Math.round(ener/area*10000)/10000:null; }
+  return {fase:fase,area:area,emitido:emitido,emis:emis,ener:ener,indEmis:indEmis,indEner:indEner,etapas:etapas};
 }
 function _carbFmt(n,d){ if(n===null||n===undefined||isNaN(n))return '—'; return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function _carbInp(id,val,step){ return '<input id="'+id+'" type="number" step="'+(step||'0.01')+'" value="'+(val!=null&&!isNaN(val)?val:'')+'" style="width:105px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px">'; }
@@ -1102,6 +1120,7 @@ function renderCarbono(){
   h+='</div>';
   h+='<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button id="carbSave" class="btn">Salvar na nuvem</button><span id="carbMsg" style="font-size:12px;color:var(--slate)"></span></div>';
   h+='<div id="carbComp" style="margin-top:22px"></div>';
+  h+='<div style="margin-top:26px;border-top:1px solid var(--line);padding-top:16px"><h3 style="font-size:14px;margin:0 0 10px">Comparar entre obras</h3><div id="carbCross"></div></div>';
   w.innerHTML=h;
   document.getElementById('carbObra').onchange=e=>{ w.__obra=e.target.value; renderCarbono(); };
   ['projeto','obra'].forEach(fase=>{
@@ -1121,6 +1140,40 @@ function renderCarbono(){
     window._db.collection('painel').doc('carbono').set({dados:CARB,atualizado:Date.now()}).then(()=>{ b.textContent='Salvar na nuvem'; const mm=document.getElementById('carbMsg'); if(mm){mm.textContent='✓ Salvo na nuvem.'; setTimeout(()=>{mm.textContent='';},3000);} renderCarbComp(sel); }).catch(e=>{ b.textContent='Salvar na nuvem'; alert('Erro: '+e.message); });
   };
   renderCarbComp(sel);
+  renderCarbCross();
+}
+let _carbCross=[];
+function renderCarbCross(){
+  const el=document.getElementById('carbCross'); if(!el)return;
+  _carbCross.forEach(c=>{try{c.destroy()}catch(e){}}); _carbCross=[];
+  const obras=Object.keys(CARB).filter(o=>CARB[o]&&(CARB[o].projeto||CARB[o].obra)).sort((a,b)=>a.localeCompare(b));
+  if(!obras.length){ el.innerHTML='<p style="font-size:12px;color:var(--slate)">Salve pelo menos uma obra (acima) para comparar aqui.</p>'; return; }
+  if(!el.__sel)el.__sel=new Set(obras);
+  const metric=el.__metric||'indEmis', fase=el.__fase||'obra';
+  const metricLabel={indEmis:'Indicador de emissões (tCO₂e/m²)',indEner:'Indicador de energia (GJ/m²)',emis:'Emissões totais (tCO₂e)',ener:'Energia total (GJ)'}[metric];
+  let h='<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px">';
+  h+='<span style="font-size:12px;color:var(--slate)">Métrica</span><select id="carbCmpMetric" class="selmini">'+[['indEmis','Ind. emissões (tCO₂e/m²)'],['indEner','Ind. energia (GJ/m²)'],['emis','Emissões totais (tCO₂e)'],['ener','Energia total (GJ)']].map(o=>'<option value="'+o[0]+'"'+(o[0]===metric?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
+  h+='<span style="font-size:12px;color:var(--slate)">Fase</span><select id="carbCmpFase" class="selmini">'+[['obra','Obra concluída'],['projeto','Projeto'],['ambos','Projeto × Obra']].map(o=>'<option value="'+o[0]+'"'+(o[0]===fase?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
+  h+='<button id="carbCmpAll" class="btn sm" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd)">Todas</button><button id="carbCmpNone" class="btn sm" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd)">Nenhuma</button></div>';
+  h+='<div style="display:flex;gap:10px 14px;flex-wrap:wrap;margin-bottom:12px">'+obras.map(o=>'<label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" class="carbCmpObra" value="'+escAttr(o)+'"'+(el.__sel.has(o)?' checked':'')+'>'+escAttr(o)+'</label>').join('')+'</div>';
+  h+='<div style="height:380px"><canvas id="carbCrossCh"></canvas></div>';
+  el.innerHTML=h;
+  const draw=()=>{
+    _carbCross.forEach(c=>{try{c.destroy()}catch(e){}}); _carbCross=[];
+    const selObras=obras.filter(o=>el.__sel.has(o));
+    const val=(o,fa)=>{ const d=(CARB[o]||{})[fa]; return d&&d[metric]!=null?d[metric]:null; };
+    const ctx=document.getElementById('carbCrossCh'); if(!ctx||!window.Chart)return;
+    let datasets;
+    if(fase==='ambos') datasets=[{label:'Projeto',data:selObras.map(o=>val(o,'projeto')),backgroundColor:'#CDB79E'},{label:'Obra',data:selObras.map(o=>val(o,'obra')),backgroundColor:'#E8792B'}];
+    else datasets=[{label:fase==='projeto'?'Projeto':'Obra',data:selObras.map(o=>val(o,fase)),backgroundColor:'#E8792B'}];
+    _carbCross.push(new Chart(ctx,{type:'bar',data:{labels:selObras,datasets:datasets},options:{maintainAspectRatio:false,plugins:{title:{display:true,text:metricLabel}},scales:{x:{ticks:{font:{size:10},maxRotation:60,minRotation:30}},y:{beginAtZero:true}}}}));
+  };
+  document.getElementById('carbCmpMetric').onchange=e=>{ el.__metric=e.target.value; renderCarbCross(); };
+  document.getElementById('carbCmpFase').onchange=e=>{ el.__fase=e.target.value; renderCarbCross(); };
+  document.getElementById('carbCmpAll').onclick=()=>{ el.__sel=new Set(obras); renderCarbCross(); };
+  document.getElementById('carbCmpNone').onclick=()=>{ el.__sel=new Set(); renderCarbCross(); };
+  el.querySelectorAll('.carbCmpObra').forEach(cb=>cb.onchange=()=>{ if(cb.checked)el.__sel.add(cb.value); else el.__sel.delete(cb.value); draw(); });
+  draw();
 }
 function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } else if(name==='carb'){ if(MASTER_ON)renderCarbono(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
