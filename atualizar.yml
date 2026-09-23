@@ -55,7 +55,7 @@ jobs:
             git push && break
             echo "push falhou (tentativa $i), o repositorio avancou; tentando de novo..."; sleep 5
           done
-      - name: Extrair validades dos cadastros (SP Regula, semanal)
+      - name: Extrair validades dos cadastros (SP Regula, diaria)
         env:
           SENHA_SPREGULA: ${{ secrets.SENHA_SPREGULA }}
           SENHAS_OBRAS: ${{ secrets.SENHAS_OBRAS }}
@@ -67,11 +67,7 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           IN_OBRAS: ${{ github.event.inputs.obras }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$(date +%u)" = "1" ]; then
-            if [ -n "$IN_OBRAS" ]; then python extrair_validades.py --obras "$IN_OBRAS" || echo "validade: etapa falhou, seguindo"; else python extrair_validades.py || echo "validade: etapa falhou, seguindo"; fi
-          else
-            echo "Validade so roda as segundas-feiras (ou em execucao manual). Pulando hoje."
-          fi
+          if [ -n "$IN_OBRAS" ]; then python extrair_validades.py --obras "$IN_OBRAS" || echo "validade: etapa falhou, seguindo"; else python extrair_validades.py || echo "validade: etapa falhou, seguindo"; fi
       - name: Publicar validades
         run: |
           git config user.name "github-actions"
