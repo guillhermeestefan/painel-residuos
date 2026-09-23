@@ -100,7 +100,7 @@ def extrair_validade_obra(page, cnpj, senha):
         raise RuntimeError("botao Confirmar nao encontrado")
     # aguarda a pagina do cadastro carregar o texto da vigencia (portal lento)
     page.wait_for_function(
-        "() => /Fim da Vig[eê\\u00ea]ncia/i.test(document.body.innerText)", timeout=60000
+        "() => /Fim da Vig[eê\\u00ea]ncia/i.test(document.body.innerText)", timeout=90000
     )
     txt = page.inner_text("body")
     m = re.search(r"Fim da Vig[eê]ncia\s*:?\s*([0-3]?\d/[01]?\d/\d{4})", txt, re.I)
@@ -143,10 +143,10 @@ def main():
         for o in obras:
             nome, cnpj, senha = o["obra"], o.get("cnpj", ""), o.get("senha", "")
             ok = False
-            for tent in range(1, 3):
+            for tent in range(1, 5):
                 ctx = browser.new_context(); page = ctx.new_page()
                 try:
-                    print(f"  -> {nome} (validade) tent {tent}/2 ...", end=" ", flush=True)
+                    print(f"  -> {nome} (validade) tent {tent}/4 ...", end=" ", flush=True)
                     val_br, numero = extrair_validade_obra(page, cnpj, senha)
                     reg = estado.get(nome, {})
                     reg.update({
@@ -162,7 +162,7 @@ def main():
                 except Exception as e:
                     msg = str(e).splitlines()[0][:90]
                     print(f"falhou: {msg}")
-                    if tent == 2:
+                    if tent == 4:
                         reg = estado.get(nome, {})
                         reg["erro"] = msg  # preserva validade anterior, so registra o erro
                         estado[nome] = reg
@@ -170,7 +170,7 @@ def main():
                     ctx.close()
                 if ok:
                     break
-                time.sleep(4)
+                time.sleep(6)
             time.sleep(1)
         browser.close()
 
