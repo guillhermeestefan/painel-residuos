@@ -1042,14 +1042,16 @@ async function parseCarbonPDF(file){
   const order=colR.map((_,i)=>i).sort((a,b)=>colSum[b]-colSum[a]);
   const mjCol=order.length?order[0]:-1, tcCol=order.length>1?order[1]:-1;
   const etapas={};
-  rowsdata.forEach(rd=>{ let tc=null,mj=null; rd.ns.forEach(n=>{ colR.forEach((r,ci)=>{ if(n.x>=r[0]&&n.x<=r[1]){ if(ci===mjCol)mj=n.v; else if(ci===tcCol)tc=n.v; } }); }); if(tc!=null||mj!=null)etapas[rd.et]={tco2e:tc,mj:mj}; });
+  rowsdata.forEach(rd=>{ let tc=null,mj=null; rd.ns.forEach(n=>{ colR.forEach((r,ci)=>{ if(n.x>=r[0]&&n.x<=r[1]){ if(ci===mjCol)mj=(mj==null?n.v:Math.max(mj,n.v)); else if(ci===tcCol)tc=(tc==null?n.v:Math.max(tc,n.v)); } }); }); if(tc!=null||mj!=null)etapas[rd.et]={tco2e:tc,mj:mj}; });
   // Totais: usa a página 1 quando ela traz os 4 números; senão (1ª edição, faixa vetorizada) deriva das etapas.
   const decs=[]; numItems.filter(n=>n.p===1).forEach(n=>{ if(Math.abs(n.v-163.14)>0.01)decs.push(n); });
   decs.sort((a,b)=>(b.y-a.y)||(a.x-b.x));
-  let emis,ener,indEmis,indEner;
-  if(decs.length>=4){ emis=decs[0].v; ener=decs[1].v; indEmis=decs[2].v; indEner=decs[3].v; }
-  else { let se=0,sm=0; for(const k in etapas){ if(etapas[k].tco2e)se+=etapas[k].tco2e; if(etapas[k].mj)sm+=etapas[k].mj; }
-    emis=Math.round(se*100)/100; ener=Math.round(sm/1000*100)/100; indEmis=area?Math.round(emis/area*10000)/10000:null; indEner=area?Math.round(ener/area*10000)/10000:null; }
+  // Deriva os totais somando as etapas; só usa os números da página 1 quando o total deles bate com a soma
+  // (evita a faixa vetorizada da 1ª edição, que o pdf.js lê fora de ordem).
+  let se=0,sm=0; for(const k in etapas){ if(etapas[k].tco2e)se+=etapas[k].tco2e; if(etapas[k].mj)sm+=etapas[k].mj; }
+  let emis=Math.round(se*100)/100, ener=Math.round(sm/1000*100)/100;
+  let indEmis=area?Math.round(emis/area*10000)/10000:null, indEner=area?Math.round(ener/area*10000)/10000:null;
+  if(decs.length>=4 && Math.abs(decs[0].v-se)/Math.max(se,1)<0.1){ emis=decs[0].v; ener=decs[1].v; indEmis=decs[2].v; indEner=decs[3].v; }
   return {fase:fase,area:area,emitido:emitido,emis:emis,ener:ener,indEmis:indEmis,indEner:indEner,etapas:etapas};
 }
 function _carbFmt(n,d){ if(n===null||n===undefined||isNaN(n))return '—'; return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
