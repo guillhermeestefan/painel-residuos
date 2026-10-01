@@ -1198,8 +1198,9 @@ async function _geoTry(url,parse){
   if(!r.ok){ _distDiag=_distDiag||('HTTP '+r.status+' em '+(url.split('/')[2])); throw new Error('HTTP '+r.status); }
   return parse(await r.json());
 }
+function _geoKey(q){ return 'v2|'+_distNorm(q); }
 async function _geocode(query){
-  const key=_distNorm(query); if(!key)return null;
+  const key=_geoKey(query); if(key==='v2|')return null;
   const c=GEOCACHE[key]; if(c){ return c.fail?null:{lat:c.lat,lon:c.lon}; }
   // 1) Photon (OpenStreetMap, amigável a navegador) com viés p/ São Paulo
   try{
@@ -1239,8 +1240,15 @@ function _distColIdx(keys){
 }
 function _distBuildAddr(r,ci){
   const g=k=>k&&r[k]!=null&&String(r[k]).trim()?String(r[k]).trim():'';
-  const munuf=[g(ci.mun),g(ci.uf)].filter(Boolean).join(' - ');
-  return [g(ci.log),g(ci.num),g(ci.bairro),munuf,g(ci.cep),'Brasil'].filter(Boolean).join(', ');
+  const uf=g(ci.uf), mun=g(ci.mun)||'SAO PAULO';
+  const cep=g(ci.cep).replace(/[^\d-]/g,'').replace(/-$/,''); // CEP sem pontos (01.047-020 -> 01047-020)
+  let log=g(ci.log); const num=g(ci.num);
+  const munuf=[mun,uf].filter(Boolean).join(' - ');
+  const full=[log,num,g(ci.bairro),munuf,cep,'Brasil'].filter(Boolean).join(', ');
+  // simplificado: só logradouro (cortando complemento) + cidade/UF + CEP
+  let logSimp=log.split(/\s+(?:CJ|CONJ|SALA|SL|ANDAR|BLOCO|BL|APTO|AP|GALP|LOJA|FUNDOS)\b/i)[0].trim();
+  const simple=[logSimp,num,munuf,cep].filter(Boolean).join(', ');
+  return {full:full, simple:simple};
 }
 function renderDistancias(){
   const w=document.getElementById('distWrap'); if(!w)return;
@@ -1261,7 +1269,7 @@ function renderDistancias(){
       if(!rows.length)throw new Error('planilha vazia'); const ci=_distColIdx(Object.keys(rows[0]));
       if(!ci.log){ document.getElementById('distFileName').textContent='⚠ não achei a coluna AGN_ST_LOGRADOURO'; return; }
       const seen={}, list=[];
-      rows.forEach(r=>{ const nome=(ci.nome&&r[ci.nome]?String(r[ci.nome]).trim():'(sem nome)'); const addr=_distBuildAddr(r,ci); if(!addr)return; const k=_distNorm(nome)||_distNorm(addr); if(seen[k])return; seen[k]=1; list.push({nome:nome,addr:addr}); });
+      rows.forEach(r=>{ const nome=(ci.nome&&r[ci.nome]?String(r[ci.nome]).trim():'(sem nome)'); const ad=_distBuildAddr(r,ci); if(!ad.full)return; const k=_distNorm(nome)||_distNorm(ad.full); if(seen[k])return; seen[k]=1; list.push({nome:nome,addr:ad.full,addrSimple:ad.simple}); });
       _distRows=list; document.getElementById('distFileName').textContent=f.name+' — '+rows.length+' linhas, '+list.length+' fornecedores únicos'; calc.disabled=false;
     }catch(err){ document.getElementById('distFileName').textContent='erro ao ler: '+err.message; }
   };
@@ -1275,8 +1283,10 @@ function renderDistancias(){
     if(!orig){ prog.innerHTML='<span style="color:var(--red)">Não consegui localizar o endereço da obra. Revise o endereço (rua, cidade - UF, CEP).'+(_distDiag?(' — '+escAttr(_distDiag)):'')+'</span>'; calc.disabled=false; return; }
     const n=_distRows.length; let novos=0;
     for(let i=0;i<n;i++){ const it=_distRows[i]; prog.textContent='Localizando fornecedores... '+(i+1)+'/'+n+' ('+it.nome.slice(0,30)+')';
-      const key=_distNorm(it.addr); const cached=GEOCACHE[key];
-      const g=await _geocode(it.addr); it.coord=g;
+      const key=_geoKey(it.addr); const cached=GEOCACHE[key]!==undefined;
+      let g=await _geocode(it.addr);
+      if(!g && it.addrSimple && it.addrSimple!==it.addr){ g=await _geocode(it.addrSimple); }
+      it.coord=g;
       if(!cached){ novos++; if(window._db&&novos%20===0){ try{ window._db.collection('painel').doc('geocache').set({dados:GEOCACHE,atualizado:Date.now()}); }catch(e){} } await _distSleep(1100); } // respeita ~1 req/s só quando é novo
     }
     prog.textContent='Medindo os trajetos de carro...';
