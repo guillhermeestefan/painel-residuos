@@ -6,6 +6,7 @@
 <title>Painel de Gestão de Resíduos — CTR's SP Regula</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -105,6 +106,7 @@
   <div class="tabbar" id="tabbar">
     <button class="tabbtn active" data-go="painel">Indicadores</button>
     <button class="tabbtn" data-go="just">Justificativas</button>
+    <button class="tabbtn" data-go="dist">Distâncias (frete)</button>
     <button class="tabbtn masteronly-tab" data-go="carac" style="display:none">Características das obras</button>
     <button class="tabbtn masteronly-tab" data-go="prog" style="display:none">Controle de Programas</button>
     <button class="tabbtn masteronly-tab" data-go="users" style="display:none">Usuários</button>
@@ -284,6 +286,11 @@
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Anexe os relatórios do CECarbon de cada obra (um da fase <b>Projeto</b>, outro da fase <b>Obra</b>). O painel lê o PDF e preenche os números; confira/ajuste e salve. O comparativo mostra emissões (tCO₂e) e energia (GJ), no total e por etapa. Os valores ficam salvos na nuvem (o PDF não é armazenado).</p>
     <div id="carbWrap"></div>
   </div>
+  <div class="panel tabpane" data-tab="dist" style="margin-top:16px" id="secDist">
+    <h3><span class="ttl">Distâncias dos fornecedores até a obra (frete — CECarbon)</span></h3>
+    <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Cadastre o <b>endereço da obra</b> em Características das obras. Aqui, escolha a obra e anexe a planilha (igual à exportação do Mega). A plataforma lê a coluna <b>AGN_ST_LOGRADOURO</b> (com bairro, município, UF e CEP), geocodifica cada fornecedor e mede a <b>distância de carro</b> até a obra, para você usar no frete do CECarbon. Usa OpenStreetMap (grátis); endereços geocodificados ficam em cache. Confira sempre e ajuste manualmente os que não forem localizados.</p>
+    <div id="distWrap"></div>
+  </div>
   <div class="foot" id="foot"></div>
   </div>
 
@@ -325,7 +332,7 @@ if(SEM_DADOS){const b=document.createElement('div');b.style.cssText='background:
 let ATTRS={};
 try{ const base=(window.CARACTERISTICAS&&typeof window.CARACTERISTICAS==='object')?window.CARACTERISTICAS:{}; const loc=JSON.parse(localStorage.getItem('obra_attrs')||'{}'); ATTRS=Object.assign({},JSON.parse(JSON.stringify(base)),loc);}catch(e){ATTRS={};}
 let MASTER_ON=false;
-let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; let FORNST={}; let CARB={};
+let CONFIG={}; let JUST={}; let USUARIOS={}; let SESSION=null; let FORNST={}; let CARB={}; let GEOCACHE={};
 try{ if(window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){}
 const CARB_ETAPAS=["Serviços Preliminares","Fundações","Estrutura","Vedações","Revestimentos (Interno e Externo)","Esquadrias e Vidros","Pintura (Interna e Externa)","Cobertura","Pavimentação e Infraestrutura","Instalações Prediais","Consumo de Energia Elétrica","Consumo de Combustíveis - Geral","Fretes - Geral (Upstream)","Transporte de Resíduos (Downstream)"]; const PAPEIS={master:'Master',eng:'Engenheiro',visualizador:'Visualizador',adm:'Administrativo',est:'Estagiário',analista_q:'Analista de Qualidade',gerente_q:'Gerente de Qualidade',coord_q:'Coordenador de Qualidade',gestor_ma:'Gestor de Meio Ambiente',consultor:'Consultor Técnico de Obra',dir_obra:'Diretor de Construção',dir_eng:'Diretor de Engenharia'};
 function ehMaster(pp){ return pp==='master'||pp==='gerente_q'||pp==='coord_q'||pp==='gestor_ma'||pp==='analista_q'; }
@@ -641,6 +648,9 @@ document.getElementById('masterBtn').onclick=async ()=>{
       const w=document.getElementById('carbWrap'); if(MASTER_ON&&w&&w.contains(document.activeElement))return;
       CARB=(snap.exists&&snap.data().dados)?snap.data().dados:{}; if(MASTER_ON&&window.__tab==='carb'&&typeof renderCarbono==='function')renderCarbono();
     },err=>console.warn('firestore carb',err));
+    window._db.collection('painel').doc('geocache').onSnapshot(snap=>{
+      if(snap.exists&&snap.data().dados) GEOCACHE=snap.data().dados;
+    },err=>console.warn('firestore geocache',err));
     window._db.collection('painel').doc('config').onSnapshot(snap=>{
       if(snap.exists&&snap.data().dados){ CONFIG=snap.data().dados; renderFixos(); }
     },err=>console.warn('firestore config',err));
@@ -694,16 +704,17 @@ function renderCarac(){
         <div><label class="lbl">Estrutura</label><select class="inp aEstr" style="min-width:200px">${oe}</select></div>
         <div style="align-self:center;padding-top:14px"><label class="lbl" style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0"><input class="aConcl" type="checkbox" ${a.concluida?'checked':''}> <b>Obra concluída</b> (não notificar)</label></div>
       </div>
+      <div style="margin-bottom:10px"><label class="lbl">Endereço da obra (para cálculo de distâncias)</label><input class="inp aEnd" type="text" style="width:100%;max-width:580px" value="${String(a.endereco||'').replace(/"/g,'&quot;')}" placeholder="Rua, número, bairro, cidade - UF, CEP"></div>
       <div class="lbl" style="margin-bottom:6px">Histórico de fases (etapa + data que entrou nela)</div>
       <div class="fasesList">${fr||'<span style="font-size:12px;color:var(--slate)">Nenhuma fase.</span>'}</div>
       <button class="btn sm addFase" style="margin-top:6px">+ Adicionar fase</button><div class="faseMsg"></div></div>`;
   }).join('');
   w.querySelectorAll('.ocard').forEach(card=>{
     const o=card.dataset.o;const ensure=()=>{ATTRS[o]=ATTRS[o]||{};ATTRS[o].fases=ATTRS[o].fases||[];};
-    const salvarBasico=()=>{ensure();const area=+card.querySelector('.aArea').value||'';const estr=card.querySelector('.aEstr').value;ATTRS[o].area=area;ATTRS[o].estrutura=estr;ATTRS[o].concluida=card.querySelector('.aConcl').checked;saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();
+    const salvarBasico=()=>{ensure();const area=+card.querySelector('.aArea').value||'';const estr=card.querySelector('.aEstr').value;ATTRS[o].area=area;ATTRS[o].estrutura=estr;ATTRS[o].concluida=card.querySelector('.aConcl').checked;const _end=card.querySelector('.aEnd');if(_end)ATTRS[o].endereco=_end.value.trim();saveAttrs();render();renderCmp();if(typeof renderJust==='function')renderJust();
       const extra=(area&&!estr)?'<div style="background:#FBF1DC;border:1px solid #E7C97A;color:#8A6410;border-radius:8px;padding:9px 11px;margin-top:8px;font-size:12px;line-height:1.5"><b>Atenção:</b> defina a <b>estrutura</b> (Alvenaria estrutural ou Concreto armado) — sem ela a obra não entra no gráfico Orçado × Realizado.</div>':'';
       _pintarMsg(card, validarFases(ATTRS[o].fases||[]), extra);};
-    card.querySelectorAll('.aArea,.aEstr,.aConcl').forEach(el=>el.addEventListener('change',salvarBasico));
+    card.querySelectorAll('.aArea,.aEstr,.aConcl,.aEnd').forEach(el=>el.addEventListener('change',salvarBasico));
     const salvarFases=()=>{ensure();
       const novas=[...card.querySelectorAll('.fasesList [data-i]')].map(row=>({etapa:row.querySelector('.fEt').value,data:row.querySelector('.fDt').value,dataFim:row.querySelector('.fDtF').value}));
       const r=validarFases(novas); _pintarMsg(card, r);
@@ -1177,7 +1188,112 @@ function renderCarbCross(){
   el.querySelectorAll('.carbCmpObra').forEach(cb=>cb.onchange=()=>{ if(cb.checked)el.__sel.add(cb.value); else el.__sel.delete(cb.value); draw(); });
   draw();
 }
-function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } else if(name==='carb'){ if(MASTER_ON)renderCarbono(); } }
+/* ===== Distâncias dos fornecedores (frete CECarbon) ===== */
+let _distFile=null, _distRows=null;
+const _distSleep=ms=>new Promise(r=>setTimeout(r,ms));
+function _distNorm(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim(); }
+function _haversine(a,b){ const R=6371,rad=x=>x*Math.PI/180; const dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon); const s=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(s)); }
+async function _geocode(query){
+  const key=_distNorm(query); if(!key)return null;
+  const c=GEOCACHE[key]; if(c){ return c.fail?null:{lat:c.lat,lon:c.lon}; }
+  try{
+    const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(query);
+    const r=await fetch(url,{headers:{'Accept-Language':'pt-BR'}});
+    const d=await r.json();
+    if(Array.isArray(d)&&d.length){ const g={lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)}; GEOCACHE[key]={lat:g.lat,lon:g.lon,ts:Date.now()}; return g; }
+    if(Array.isArray(d)){ GEOCACHE[key]={fail:true,ts:Date.now()}; } // só cacheia falha quando a resposta é válida e vazia
+    return null;
+  }catch(e){ return null; }
+}
+async function _osrmDist(origin,dests){ // devolve km de origin->cada dest (ou null)
+  const out=new Array(dests.length).fill(null);
+  for(let i=0;i<dests.length;i+=90){
+    const batch=dests.slice(i,i+90);
+    const coords=[origin].concat(batch).map(p=>p.lon+','+p.lat).join(';');
+    try{
+      const url='https://router.project-osrm.org/table/v1/driving/'+coords+'?sources=0&annotations=distance';
+      const r=await fetch(url); const d=await r.json();
+      const row=d&&d.distances&&d.distances[0];
+      if(row){ for(let j=0;j<batch.length;j++){ const m=row[j+1]; out[i+j]=(m!=null)?m/1000:null; } }
+    }catch(e){}
+    await _distSleep(400);
+  }
+  return out;
+}
+function _distColIdx(keys){
+  const find=preds=>keys.find(k=>{const u=k.toUpperCase();return preds.some(p=>u.includes(p));});
+  return { log:find(['LOGRAD']), num:find(['NUMERO','NÚMERO']), bairro:find(['BAIRRO']),
+    mun:find(['MUNICIP']), uf:keys.find(k=>k.toUpperCase().includes('UF'))||find(['ESTADO']),
+    cep:find(['CEP']), nome:keys.find(k=>k.toUpperCase()==='AGN_ST_NOME')||find(['NOME']) };
+}
+function _distBuildAddr(r,ci){
+  const g=k=>k&&r[k]!=null&&String(r[k]).trim()?String(r[k]).trim():'';
+  const munuf=[g(ci.mun),g(ci.uf)].filter(Boolean).join(' - ');
+  return [g(ci.log),g(ci.num),g(ci.bairro),munuf,g(ci.cep),'Brasil'].filter(Boolean).join(', ');
+}
+function renderDistancias(){
+  const w=document.getElementById('distWrap'); if(!w)return;
+  if(!window.XLSX){ w.innerHTML='<p style="font-size:12.5px;color:var(--red)">Biblioteca de planilha não carregou — recarregue a página.</p>'; return; }
+  const obras=(typeof obrasDoUsuario==='function'?obrasDoUsuario():[...new Set(RAW.map(r=>r.obra).filter(Boolean))]).sort((a,b)=>a.localeCompare(b));
+  if(!obras.length){ w.innerHTML='<p style="font-size:12.5px;color:var(--slate)">Sem obras disponíveis.</p>'; return; }
+  let sel=w.__obra||obras[0]; if(obras.indexOf(sel)<0)sel=obras[0]; w.__obra=sel;
+  const endObra=(ATTRS[sel]&&ATTRS[sel].endereco)||'';
+  let h='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:12px;color:var(--slate)">Obra</span><select id="distObra" class="selmini" style="min-width:180px">'+obras.map(o=>'<option'+(o===sel?' selected':'')+'>'+escAttr(o)+'</option>').join('')+'</select></div>';
+  h+='<div style="margin-bottom:10px"><label class="lbl">Endereço da obra (origem)</label><input id="distEndObra" type="text" style="width:100%;max-width:580px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px" value="'+escAttr(endObra)+'" placeholder="Rua, número, bairro, cidade - UF, CEP">'+(endObra?'':' <span style="font-size:11.5px;color:#9A4A0F">preencha aqui ou em Características das obras</span>')+'</div>';
+  h+='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><label class="btn sm" style="background:#fff;color:var(--orange);border:1px solid var(--cream-bd);cursor:pointer">Anexar planilha<input type="file" accept=".xlsx,.xls" id="distFile" style="display:none"></label><span id="distFileName" style="font-size:12px;color:var(--slate)"></span><button id="distCalc" class="btn" disabled>Calcular distâncias</button></div>';
+  h+='<div id="distProg" style="font-size:12.5px;color:var(--slate);margin-bottom:8px"></div><div id="distOut"></div>';
+  w.innerHTML=h;
+  document.getElementById('distObra').onchange=e=>{ w.__obra=e.target.value; _distFile=null; _distRows=null; renderDistancias(); };
+  const fi=document.getElementById('distFile'), calc=document.getElementById('distCalc');
+  fi.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; _distFile=f; document.getElementById('distFileName').textContent=f.name+' — lendo...';
+    try{ const buf=await f.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      if(!rows.length)throw new Error('planilha vazia'); const ci=_distColIdx(Object.keys(rows[0]));
+      if(!ci.log){ document.getElementById('distFileName').textContent='⚠ não achei a coluna AGN_ST_LOGRADOURO'; return; }
+      const seen={}, list=[];
+      rows.forEach(r=>{ const nome=(ci.nome&&r[ci.nome]?String(r[ci.nome]).trim():'(sem nome)'); const addr=_distBuildAddr(r,ci); if(!addr)return; const k=_distNorm(nome)||_distNorm(addr); if(seen[k])return; seen[k]=1; list.push({nome:nome,addr:addr}); });
+      _distRows=list; document.getElementById('distFileName').textContent=f.name+' — '+rows.length+' linhas, '+list.length+' fornecedores únicos'; calc.disabled=false;
+    }catch(err){ document.getElementById('distFileName').textContent='erro ao ler: '+err.message; }
+  };
+  calc.onclick=async ()=>{
+    const endO=document.getElementById('distEndObra').value.trim();
+    if(!endO){ alert('Informe o endereço da obra (origem).'); return; }
+    if(!_distRows||!_distRows.length){ alert('Anexe a planilha primeiro.'); return; }
+    calc.disabled=true; const prog=document.getElementById('distProg');
+    prog.textContent='Localizando a obra...';
+    const orig=await _geocode(endO);
+    if(!orig){ prog.innerHTML='<span style="color:var(--red)">Não consegui localizar o endereço da obra. Revise o endereço (rua, cidade - UF, CEP).</span>'; calc.disabled=false; return; }
+    const n=_distRows.length; let novos=0;
+    for(let i=0;i<n;i++){ const it=_distRows[i]; prog.textContent='Localizando fornecedores... '+(i+1)+'/'+n+' ('+it.nome.slice(0,30)+')';
+      const key=_distNorm(it.addr); const cached=GEOCACHE[key];
+      const g=await _geocode(it.addr); it.coord=g;
+      if(!cached){ novos++; if(window._db&&novos%20===0){ try{ window._db.collection('painel').doc('geocache').set({dados:GEOCACHE,atualizado:Date.now()}); }catch(e){} } await _distSleep(1100); } // respeita ~1 req/s só quando é novo
+    }
+    prog.textContent='Medindo os trajetos de carro...';
+    const idx=[], dests=[]; _distRows.forEach((it,i)=>{ if(it.coord){ idx.push(i); dests.push(it.coord); } });
+    const kms=await _osrmDist(orig,dests);
+    idx.forEach((i,j)=>{ const it=_distRows[i]; it.km=kms[j]; it.metodo=kms[j]!=null?'carro':null; if(it.km==null&&it.coord){ it.km=_haversine(orig,it.coord); it.metodo='reta'; } });
+    if(window._db&&novos>0){ try{ window._db.collection('painel').doc('geocache').set({dados:GEOCACHE,atualizado:Date.now()}); }catch(e){} }
+    prog.innerHTML='✓ Concluído. '+idx.length+' de '+n+' fornecedores localizados'+(novos?(' ('+novos+' novos geocodificados)'):'')+'.';
+    _distRenderTabela(sel);
+  };
+  if(_distRows) document.getElementById('distFileName').textContent=(_distFile?_distFile.name+' — ':'')+_distRows.length+' fornecedores únicos', calc.disabled=false;
+  if(_distRows&&_distRows.some(r=>r.km!=null||r.coord!==undefined)) _distRenderTabela(sel);
+}
+function _distRenderTabela(obra){
+  const out=document.getElementById('distOut'); if(!out||!_distRows)return;
+  const rows=_distRows.slice().sort((a,b)=>((a.km==null)-(b.km==null))||((a.km||0)-(b.km||0)));
+  let h='<div style="margin:6px 0 10px"><button id="distCsv" class="btn sm" style="background:#8A8F98">Exportar CSV</button></div>';
+  h+='<table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr style="color:var(--slate)"><th style="text-align:left;padding:6px 6px;text-transform:uppercase;font-size:10.5px">Fornecedor</th><th style="text-align:left;padding:6px;text-transform:uppercase;font-size:10.5px">Endereço</th><th style="padding:6px;text-transform:uppercase;font-size:10.5px">Distância (km)</th><th style="padding:6px;text-transform:uppercase;font-size:10.5px">Método</th></tr></thead><tbody>';
+  _distRows.forEach((it,i)=>{ const st=it.km==null?'<span style="color:#B23A2E">não localizado</span>':(it.metodo==='reta'?'<span style="color:#9A4A0F">linha reta</span>':'carro');
+    h+='<tr data-i="'+i+'" style="border-top:1px solid var(--line)"><td style="padding:6px 6px;font-weight:600">'+escAttr(it.nome)+'</td><td style="padding:6px;color:#666">'+escAttr(it.addr)+'</td><td style="padding:6px;text-align:center"><input class="distKm" type="number" step="0.1" value="'+(it.km!=null?Math.round(it.km*10)/10:'')+'" style="width:80px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;text-align:right"></td><td style="padding:6px;text-align:center;font-size:11px">'+st+'</td></tr>'; });
+  h+='</tbody></table>';
+  out.innerHTML=h;
+  out.querySelectorAll('.distKm').forEach(inp=>inp.onchange=()=>{ const i=+inp.closest('tr').dataset.i; const v=parseFloat(inp.value); _distRows[i].km=isNaN(v)?null:v; _distRows[i].metodo=isNaN(v)?null:'manual'; });
+  document.getElementById('distCsv').onclick=()=>{ const esc=v=>/[",;\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
+    const linhas=[['Fornecedor','Endereco','Distancia_km','Metodo']].concat(_distRows.map(it=>[it.nome,it.addr,it.km!=null?String(Math.round(it.km*100)/100).replace('.',','):'',it.metodo||'']));
+    const csv='﻿'+linhas.map(l=>l.map(esc).join(';')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='distancias_'+_distNorm(obra).replace(/ /g,'_')+'.csv'; a.click(); URL.revokeObjectURL(a.href); };
+}
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } else if(name==='carb'){ if(MASTER_ON)renderCarbono(); } else if(name==='dist'){ renderDistancias(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
 // Botão "Atualizar dados": recalcula etapas e re-renderiza tudo (gráficos + pendências das abas)
