@@ -106,14 +106,14 @@
   <div class="tabbar" id="tabbar">
     <button class="tabbtn active" data-go="painel">Indicadores</button>
     <button class="tabbtn" data-go="just">Justificativas</button>
-    <button class="tabbtn" data-go="dist">Distâncias (frete)</button>
     <button class="tabbtn masteronly-tab" data-go="carac" style="display:none">Características das obras</button>
     <button class="tabbtn masteronly-tab" data-go="prog" style="display:none">Controle de Programas</button>
     <button class="tabbtn masteronly-tab" data-go="users" style="display:none">Usuários</button>
     <button class="tabbtn masteronly-tab" data-go="qual" style="display:none">Qualidade dos dados</button>
     <button class="tabbtn masteronly-tab" data-go="valid" style="display:none">Validade dos cadastros</button>
     <button class="tabbtn masteronly-tab" data-go="forn" style="display:none">Fornecedores</button>
-    <button class="tabbtn masteronly-tab" data-go="carb" style="display:none">Cecarbon</button>
+    <button class="tabbtn masteronly-tab" data-go="carb" style="display:none">CECarbon</button>
+    <button class="tabbtn" data-go="dist">Distâncias (frete)</button>
   </div>
   <div id="paneIndicadores" class="tabpane" data-tab="painel">
   <div class="filters">
@@ -1189,21 +1189,32 @@ function renderCarbCross(){
   draw();
 }
 /* ===== Distâncias dos fornecedores (frete CECarbon) ===== */
-let _distFile=null, _distRows=null;
+let _distFile=null, _distRows=null, _distDiag='';
 const _distSleep=ms=>new Promise(r=>setTimeout(r,ms));
 function _distNorm(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim(); }
 function _haversine(a,b){ const R=6371,rad=x=>x*Math.PI/180; const dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon); const s=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.sqrt(s)); }
+async function _geoTry(url,parse){
+  const r=await fetch(url);
+  if(!r.ok){ _distDiag=_distDiag||('HTTP '+r.status+' em '+(url.split('/')[2])); throw new Error('HTTP '+r.status); }
+  return parse(await r.json());
+}
 async function _geocode(query){
   const key=_distNorm(query); if(!key)return null;
   const c=GEOCACHE[key]; if(c){ return c.fail?null:{lat:c.lat,lon:c.lon}; }
+  // 1) Photon (OpenStreetMap, amigável a navegador) com viés p/ São Paulo
   try{
-    const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(query);
-    const r=await fetch(url,{headers:{'Accept-Language':'pt-BR'}});
-    const d=await r.json();
-    if(Array.isArray(d)&&d.length){ const g={lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)}; GEOCACHE[key]={lat:g.lat,lon:g.lon,ts:Date.now()}; return g; }
-    if(Array.isArray(d)){ GEOCACHE[key]={fail:true,ts:Date.now()}; } // só cacheia falha quando a resposta é válida e vazia
-    return null;
-  }catch(e){ return null; }
+    const g=await _geoTry('https://photon.komoot.io/api/?limit=1&lat=-23.55&lon=-46.63&q='+encodeURIComponent(query),
+      d=>{ const f=d&&d.features&&d.features[0]; return f&&f.geometry?{lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0]}:null; });
+    if(g){ GEOCACHE[key]={lat:g.lat,lon:g.lon,ts:Date.now()}; return g; }
+  }catch(e){ _distDiag=_distDiag||('Photon: '+e.message); }
+  // 2) Nominatim (reserva)
+  try{
+    const g=await _geoTry('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q='+encodeURIComponent(query),
+      d=>{ return (Array.isArray(d)&&d.length)?{lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)}:(Array.isArray(d)?'empty':null); });
+    if(g&&g!=='empty'){ GEOCACHE[key]={lat:g.lat,lon:g.lon,ts:Date.now()}; return g; }
+    if(g==='empty'){ GEOCACHE[key]={fail:true,ts:Date.now()}; } // ambos responderam vazio -> endereço realmente não encontrado
+  }catch(e){ _distDiag=_distDiag||('Nominatim: '+e.message); }
+  return null;
 }
 async function _osrmDist(origin,dests){ // devolve km de origin->cada dest (ou null)
   const out=new Array(dests.length).fill(null);
@@ -1258,10 +1269,10 @@ function renderDistancias(){
     const endO=document.getElementById('distEndObra').value.trim();
     if(!endO){ alert('Informe o endereço da obra (origem).'); return; }
     if(!_distRows||!_distRows.length){ alert('Anexe a planilha primeiro.'); return; }
-    calc.disabled=true; const prog=document.getElementById('distProg');
+    calc.disabled=true; const prog=document.getElementById('distProg'); _distDiag='';
     prog.textContent='Localizando a obra...';
     const orig=await _geocode(endO);
-    if(!orig){ prog.innerHTML='<span style="color:var(--red)">Não consegui localizar o endereço da obra. Revise o endereço (rua, cidade - UF, CEP).</span>'; calc.disabled=false; return; }
+    if(!orig){ prog.innerHTML='<span style="color:var(--red)">Não consegui localizar o endereço da obra. Revise o endereço (rua, cidade - UF, CEP).'+(_distDiag?(' — '+escAttr(_distDiag)):'')+'</span>'; calc.disabled=false; return; }
     const n=_distRows.length; let novos=0;
     for(let i=0;i<n;i++){ const it=_distRows[i]; prog.textContent='Localizando fornecedores... '+(i+1)+'/'+n+' ('+it.nome.slice(0,30)+')';
       const key=_distNorm(it.addr); const cached=GEOCACHE[key];
@@ -1273,7 +1284,7 @@ function renderDistancias(){
     const kms=await _osrmDist(orig,dests);
     idx.forEach((i,j)=>{ const it=_distRows[i]; it.km=kms[j]; it.metodo=kms[j]!=null?'carro':null; if(it.km==null&&it.coord){ it.km=_haversine(orig,it.coord); it.metodo='reta'; } });
     if(window._db&&novos>0){ try{ window._db.collection('painel').doc('geocache').set({dados:GEOCACHE,atualizado:Date.now()}); }catch(e){} }
-    prog.innerHTML='✓ Concluído. '+idx.length+' de '+n+' fornecedores localizados'+(novos?(' ('+novos+' novos geocodificados)'):'')+'.';
+    prog.innerHTML='✓ Concluído. '+idx.length+' de '+n+' fornecedores localizados'+(novos?(' ('+novos+' tentados)'):'')+'.'+((idx.length===0&&_distDiag)?(' <span style="color:var(--red)">Falha no serviço de mapa: '+escAttr(_distDiag)+'</span>'):'');
     _distRenderTabela(sel);
   };
   if(_distRows) document.getElementById('distFileName').textContent=(_distFile?_distFile.name+' — ':'')+_distRows.length+' fornecedores únicos', calc.disabled=false;
