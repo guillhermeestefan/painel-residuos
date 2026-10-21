@@ -1027,43 +1027,30 @@ async function parseCarbonPDF(file){
   const norm=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
   const nt=norm(fullText);
   let fase=null; if(nt.includes('etapa: projeto'))fase='projeto'; else if(nt.includes('etapa: obra'))fase='obra';
-  const pnum=s=>{ s=(s||'').trim(); if(!/^\d{1,3}(\.\d{3})*,\d+$/.test(s)&&!/^\d+,\d+$/.test(s))return null; return parseFloat(s.replace(/\./g,'').replace(',','.')); };
+  const pnum=s=>{ const m=(s||'').trim().match(/^(\d{1,3}(?:\.\d{3})*,\d+|\d+,\d+)/); return m?parseFloat(m[1].replace(/\./g,'').replace(',','.')):null; };
   let area=null,m=fullText.match(/rea Total a Construir[^:]*:\s*([0-9.,]+)/i);
   if(m){ const a=m[1]; area=a.indexOf(',')>=0?parseFloat(a.replace(/\./g,'').replace(',','.')):parseFloat(a); }
   let emitido=null; m=fullText.match(/emitido em (\d{2}\/\d{2}\/\d{4})/i); if(m)emitido=m[1];
   const numItems=items.map(it=>({p:it.p,x:it.x,y:it.y,v:pnum(it.s)})).filter(it=>it.v!==null);
   const rowsMap={}; items.forEach(it=>{ const k=it.p+':'+Math.round(it.y/3); (rowsMap[k]=rowsMap[k]||[]).push(it); });
   const textRows=Object.values(rowsMap).map(arr=>{ const left=arr.filter(a=>a.x<215).sort((a,b)=>a.x-b.x); const y=arr.reduce((s,a)=>s+a.y,0)/arr.length; return {p:arr[0].p,y:y,leftText:left.map(a=>a.s).join(' ').replace(/\s+/g,' ').trim()}; });
-  // Para cada etapa, acha a LINHA da tabela (a que tem o maior número) e reduz a 1 número por coluna x (máx, ignora %).
-  const rowsdata=[];
-  CARB_ETAPAS.forEach(et=>{ const ne=norm(et); let best=null;
-    textRows.forEach(r=>{ const lt=norm(r.leftText); if(lt.length>=5 && (ne.startsWith(lt)||lt.startsWith(ne))){
-      const nums=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8);
-      const mx=nums.reduce((a,n)=>Math.max(a,n.v),0);
-      if(nums.length&&(!best||mx>best.mx))best={mx:mx,nums:nums};
-    }});
-    if(best){ const buck={}; best.nums.forEach(n=>{ const k=Math.round(n.x/15); if(!buck[k]||n.v>buck[k].v)buck[k]=n; }); rowsdata.push({et:et,ns:Object.keys(buck).map(k=>buck[k])}); }
-  });
-  // Colunas identificadas por posição x (independe do layout: 1ª e 2ª edição têm ordens diferentes).
-  const allx=[]; rowsdata.forEach(rd=>rd.ns.forEach(n=>allx.push(n.x))); allx.sort((a,b)=>a-b);
-  const cols=[]; if(allx.length){ let cur=[allx[0]]; for(let i=1;i<allx.length;i++){ if(allx[i]-cur[cur.length-1]<=40)cur.push(allx[i]); else{cols.push(cur);cur=[allx[i]];} } cols.push(cur); }
-  const colR=cols.map(g=>[Math.min.apply(null,g)-20,Math.max.apply(null,g)+20]);
-  const colSum=colR.map(()=>0);
-  rowsdata.forEach(rd=>rd.ns.forEach(n=>{ colR.forEach((r,ci)=>{ if(n.x>=r[0]&&n.x<=r[1])colSum[ci]+=n.v; }); }));
-  // MJ = coluna de maior soma (milhões); tCO2e = a próxima maior; a menor é biogênica (descartada).
-  const order=colR.map((_,i)=>i).sort((a,b)=>colSum[b]-colSum[a]);
-  const mjCol=order.length?order[0]:-1, tcCol=order.length>1?order[1]:-1;
+  // Tabela de emissões por etapa — robusto p/ ambos os layouts do CECarbon (inclui a 2ª edição com Pegada Hídrica).
+  // A linha da tabela detalhada tem >=3 números (biogênica, MJ, %, tCO2e, %). MJ = o maior; tCO2e = o maior dos restantes.
+  // Linhas de gráfico (1 número) e tabelas de água/custo são ignoradas por não terem 3+ números na linha.
   const etapas={};
-  rowsdata.forEach(rd=>{ let tc=null,mj=null; rd.ns.forEach(n=>{ colR.forEach((r,ci)=>{ if(n.x>=r[0]&&n.x<=r[1]){ if(ci===mjCol)mj=(mj==null?n.v:Math.max(mj,n.v)); else if(ci===tcCol)tc=(tc==null?n.v:Math.max(tc,n.v)); } }); }); if(tc!=null||mj!=null)etapas[rd.et]={tco2e:tc,mj:mj}; });
-  // Totais: usa a página 1 quando ela traz os 4 números; senão (1ª edição, faixa vetorizada) deriva das etapas.
-  const decs=[]; numItems.filter(n=>n.p===1).forEach(n=>{ if(Math.abs(n.v-163.14)>0.01)decs.push(n); });
-  decs.sort((a,b)=>(b.y-a.y)||(a.x-b.x));
-  // Deriva os totais somando as etapas; só usa os números da página 1 quando o total deles bate com a soma
-  // (evita a faixa vetorizada da 1ª edição, que o pdf.js lê fora de ordem).
+  CARB_ETAPAS.forEach(et=>{ const ne=norm(et); let best=null;
+    textRows.forEach(r=>{ const lt=norm(r.leftText); if(!(lt.length>=5 && (ne.startsWith(lt)||lt.startsWith(ne)))) return;
+      const nums=numItems.filter(n=>n.p===r.p&&Math.abs(n.y-r.y)<=8).map(n=>n.v);
+      if(nums.length<3) return;
+      const mx=Math.max.apply(null,nums);
+      if(!best||mx>best.mx) best={mx:mx,nums:nums};
+    });
+    if(best){ const mj=best.mx; const resto=best.nums.filter(v=>v!==mj); const tc=resto.length?Math.max.apply(null,resto):null; etapas[et]={tco2e:tc,mj:mj}; }
+  });
+  // Totais derivados da soma das etapas; indicadores = total / área.
   let se=0,sm=0; for(const k in etapas){ if(etapas[k].tco2e)se+=etapas[k].tco2e; if(etapas[k].mj)sm+=etapas[k].mj; }
   let emis=Math.round(se*100)/100, ener=Math.round(sm/1000*100)/100;
   let indEmis=area?Math.round(emis/area*10000)/10000:null, indEner=area?Math.round(ener/area*10000)/10000:null;
-  if(decs.length>=4 && Math.abs(decs[0].v-se)/Math.max(se,1)<0.1){ emis=decs[0].v; ener=decs[1].v; indEmis=decs[2].v; indEner=decs[3].v; }
   return {fase:fase,area:area,emitido:emitido,emis:emis,ener:ener,indEmis:indEmis,indEner:indEner,etapas:etapas};
 }
 function _carbFmt(n,d){ if(n===null||n===undefined||isNaN(n))return '—'; return Number(n).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
@@ -1114,6 +1101,9 @@ function renderCarbono(){
   const dados=CARB[sel]||{};
   const pdfok=!!window.pdfjsLib;
   let h='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span style="font-size:12px;color:var(--slate)">Obra</span><select id="carbObra" class="selmini" style="min-width:180px">'+obras.map(o=>'<option'+(o===sel?' selected':'')+'>'+escAttr(o)+'</option>').join('')+'</select></div>';
+  h+='<div id="carbComp" style="margin-top:4px"></div>';
+  h+='<div style="margin-top:22px;border-top:1px solid var(--line);padding-top:16px"><h3 style="font-size:14px;margin:0 0 10px">Comparar entre obras</h3><div id="carbCross"></div></div>';
+  h+='<div style="margin-top:26px;border-top:1px solid var(--line);padding-top:16px"><h3 style="font-size:14px;margin:0 0 6px">Anexar / editar relatórios (Projeto e Obra)</h3><p style="font-size:11.5px;color:var(--slate);margin:0 0 12px">Anexe o PDF do CECarbon; o painel lê e preenche os números. Confira e clique em Salvar.</p></div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
   ['projeto','obra'].forEach(fase=>{
     const D=dados[fase]||{etapas:{}}; const titulo=fase==='projeto'?'Projeto':'Obra concluída';
@@ -1133,8 +1123,6 @@ function renderCarbono(){
   });
   h+='</div>';
   h+='<div style="margin-top:14px;display:flex;gap:10px;align-items:center"><button id="carbSave" class="btn">Salvar na nuvem</button><span id="carbMsg" style="font-size:12px;color:var(--slate)"></span></div>';
-  h+='<div id="carbComp" style="margin-top:22px"></div>';
-  h+='<div style="margin-top:26px;border-top:1px solid var(--line);padding-top:16px"><h3 style="font-size:14px;margin:0 0 10px">Comparar entre obras</h3><div id="carbCross"></div></div>';
   w.innerHTML=h;
   document.getElementById('carbObra').onchange=e=>{ w.__obra=e.target.value; renderCarbono(); };
   ['projeto','obra'].forEach(fase=>{
