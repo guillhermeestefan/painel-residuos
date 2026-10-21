@@ -1023,6 +1023,7 @@ async function parseCarbonPDF(file){
   let items=[], fullText='';
   for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const tc=await pg.getTextContent();
     tc.items.forEach(it=>{ if(!it.str)return; items.push({s:it.str,x:it.transform[4],y:it.transform[5],p:i}); fullText+=it.str+' '; }); }
+  if(items.length<20) throw new Error('PDF sem texto (parece ser só imagem/escaneado). Este relatório não dá para ler automaticamente — preencha os campos manualmente.');
   const norm=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
   const nt=norm(fullText);
   let fase=null; if(nt.includes('etapa: projeto'))fase='projeto'; else if(nt.includes('etapa: obra'))fase='obra';
