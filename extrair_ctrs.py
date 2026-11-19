@@ -10,7 +10,7 @@ Roda na nuvem (GitHub Actions), sem depender do seu computador:
   - execuções seguintes: só o período recente (--dias) e acumula
 """
 
-import argparse, csv, json, os, sys, unicodedata, shutil
+import argparse, csv, json, os, re, sys, unicodedata, shutil
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -399,7 +399,21 @@ def ler_xls_ctr(path, obra):
     c_dest=col("Destino","destinac"); c_status=col("Status","situacao")
     c_ender=col("Endereco"); c_pgrcc=col("NumeroPGRCC")
     c_cacamba=col("TipoCacamba","tipo cacamba","cacamba","tbCacamba")
+    c_retirada=col("DtRetirada","retirada"); c_baixa=col("DtBaixa","baixa")
     def cel(r,i): return "" if i is None or i>=len(r) or r[i] is None else str(r[i]).strip()
+    def dt_iso(s):
+        # normaliza "05/06/2026 07:48:52" ou "2026-06-05 07:48:52" -> "2026-06-05T07:48:52"
+        s=(s or "").strip()
+        if not s: return ""
+        m=re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?', s)
+        if m:
+            d,mo,y,hh,mm,ss=m.groups()
+            return f"{y}-{mo.zfill(2)}-{d.zfill(2)}T{(hh or '00').zfill(2)}:{(mm or '00')}:{(ss or '00')}"
+        m=re.match(r'(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?', s)
+        if m:
+            y,mo,d,hh,mm,ss=m.groups()
+            return f"{y}-{mo}-{d}T{(hh or '00').zfill(2)}:{(mm or '00')}:{(ss or '00')}"
+        return ""
     regs=[]
     for r in rows[1:]:
         if r is None or all(c is None for c in r): continue
@@ -427,7 +441,8 @@ def ler_xls_ctr(path, obra):
             "data":data,"status":normaliza_status(st),
             "divergencia":"divergencia" in strip_acc(st) and "sem" not in strip_acc(st),
             "endereco":cel(r,c_ender),"pgrcc":cel(r,c_pgrcc),
-            "tipo_cacamba":cacamba})
+            "tipo_cacamba":cacamba,
+            "retirada":dt_iso(cel(r,c_retirada)),"baixa":dt_iso(cel(r,c_baixa))})
     return regs
 
 def salvar_consolidado(regs_novos, ativas=None):

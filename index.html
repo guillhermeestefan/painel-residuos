@@ -275,6 +275,7 @@
     <h3><span class="ttl">Qualidade dos dados (Master)</span><button id="btExpQual" class="btn sm" style="background:#8A8F98">Exportar CSV</button></h3>
     <p style="font-size:12.5px;color:var(--slate);margin:-4px 0 12px">Aponta o que precisa de correção na fonte: erros no histórico de fases, obras sem estrutura, CTRs sem etapa cadastrada, divergências do SP Regula e volume zerado. Recalculado ao vivo a partir dos dados atuais.</p>
     <div id="qualWrap"></div>
+    <div id="concWrap" style="margin-top:26px;border-top:2px solid var(--line);padding-top:16px"></div>
   </div>
   <div class="panel tabpane" data-tab="forn" style="margin-top:16px" id="secForn">
     <h3><span class="ttl">Fornecedores por obra (Master)</span></h3>
@@ -1303,7 +1304,37 @@ function _distRenderTabela(obra){
     const linhas=[['Fornecedor','Endereco','Distancia_km','Metodo']].concat(_distRows.map(it=>[it.nome,it.addr,it.km!=null?String(Math.round(it.km*100)/100).replace('.',','):'',it.metodo||'']));
     const csv='﻿'+linhas.map(l=>l.map(esc).join(';')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='distancias_'+_distNorm(obra).replace(/ /g,'_')+'.csv'; a.click(); URL.revokeObjectURL(a.href); };
 }
-function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON)renderQualidade(); } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } else if(name==='carb'){ if(MASTER_ON)renderCarbono(); } else if(name==='dist'){ renderDistancias(); } }
+let _concChart=null;
+function renderConcordancia(){
+  const el=document.getElementById('concWrap'); if(!el)return;
+  if(_concChart){try{_concChart.destroy()}catch(e){} _concChart=null;}
+  let comHora=0; const rows=[];
+  (RAW||[]).forEach(r=>{ if(!r.retirada||!r.baixa)return; const a=new Date(r.retirada),b=new Date(r.baixa); if(isNaN(a)||isNaN(b))return; comHora++; const min=(b-a)/60000; if(min<15) rows.push({obra:r.obra,transp:r.transportador||'Não informado',numero:r.numero,retirada:r.retirada,baixa:r.baixa,min:min}); });
+  let h='<h3 style="font-size:15px;margin:0 0 4px">Concordância de horários — trânsito &lt; 15 min</h3>';
+  h+='<p style="font-size:12.5px;color:var(--slate);margin:0 0 12px">Compara a hora de <b>retirada</b> (coleta na obra) com a de <b>baixa</b> (chegada no destino). Trânsito menor que 15 minutos é fisicamente implausível e indica inconsistência no registro. Considera todos os CTRs da base.</p>';
+  if(!comHora){ el.innerHTML=h+'<p style="font-size:12.5px;color:#9A4A0F">Ainda não há CTRs com horário de retirada/baixa na base. Rode o backfill (Atualizar dados → <b>desde</b> 01/01/2020) para popular os horários; depois esta análise aparece aqui.</p>'; return; }
+  const pct=comHora?(rows.length/comHora*100):0;
+  h+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px">';
+  h+='<div style="border:1px solid var(--line);border-radius:10px;padding:12px 16px"><div style="font-size:11px;color:var(--slate);text-transform:uppercase">CTRs com horário</div><div style="font-size:20px;font-weight:600">'+comHora.toLocaleString('pt-BR')+'</div></div>';
+  h+='<div style="border:1px solid var(--line);border-radius:10px;padding:12px 16px"><div style="font-size:11px;color:var(--slate);text-transform:uppercase">Inconsistentes (&lt;15 min)</div><div style="font-size:20px;font-weight:600;color:#B23A2E">'+rows.length.toLocaleString('pt-BR')+'</div></div>';
+  h+='<div style="border:1px solid var(--line);border-radius:10px;padding:12px 16px"><div style="font-size:11px;color:var(--slate);text-transform:uppercase">% do total</div><div style="font-size:20px;font-weight:600">'+pct.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%</div></div></div>';
+  if(!rows.length){ el.innerHTML=h+'<p style="font-size:12.5px;color:#217a45">Nenhum CTR com trânsito abaixo de 15 min — tudo consistente. 👍</p>'; return; }
+  h+='<div style="height:340px;margin-bottom:8px"><canvas id="concCh"></canvas></div>';
+  h+='<div style="margin:6px 0"><button id="concCsv" class="btn sm" style="background:#8A8F98">Exportar CSV</button></div>';
+  h+='<div style="max-height:440px;overflow:auto"><table style="border-collapse:collapse;width:100%;font-size:12px"><thead><tr style="color:var(--slate)"><th style="text-align:left;padding:6px;text-transform:uppercase;font-size:10.5px">Obra</th><th style="text-align:left;padding:6px;text-transform:uppercase;font-size:10.5px">Transportador</th><th style="text-align:left;padding:6px;text-transform:uppercase;font-size:10.5px">CTR</th><th style="padding:6px;text-transform:uppercase;font-size:10.5px">Retirada</th><th style="padding:6px;text-transform:uppercase;font-size:10.5px">Baixa</th><th style="padding:6px;text-transform:uppercase;font-size:10.5px">Trânsito (min)</th></tr></thead><tbody>';
+  const fmt=s=>{ const d=new Date(s); return isNaN(d)?escAttr(s):(d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})); };
+  rows.sort((a,b)=>a.min-b.min).forEach(r=>{ h+='<tr style="border-top:1px solid var(--line)"><td style="padding:5px 6px;font-weight:600">'+escAttr(r.obra)+'</td><td style="padding:5px 6px">'+escAttr(r.transp)+'</td><td style="padding:5px 6px;color:#666">'+escAttr(r.numero)+'</td><td style="padding:5px 6px;text-align:center;color:#666">'+fmt(r.retirada)+'</td><td style="padding:5px 6px;text-align:center;color:#666">'+fmt(r.baixa)+'</td><td style="padding:5px 6px;text-align:center;font-weight:600;color:#B23A2E">'+r.min.toLocaleString('pt-BR',{maximumFractionDigits:1})+'</td></tr>'; });
+  h+='</tbody></table></div>';
+  el.innerHTML=h;
+  const byT={}; rows.forEach(r=>{ byT[r.transp]=(byT[r.transp]||0)+1; });
+  const ent=Object.entries(byT).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  const ctx=document.getElementById('concCh');
+  if(ctx&&window.Chart){ _concChart=new Chart(ctx,{type:'bar',data:{labels:ent.map(e=>e[0]),datasets:[{label:'CTRs < 15 min',data:ent.map(e=>e[1]),backgroundColor:'#B23A2E'}]},options:{maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'CTRs com trânsito < 15 min por transportador'}},scales:{x:{beginAtZero:true,ticks:{precision:0}},y:{ticks:{font:{size:10}}}}}}); }
+  document.getElementById('concCsv').onclick=()=>{ const esc=v=>/[",;\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
+    const L=[['Obra','Transportador','CTR','Retirada','Baixa','Transito_min']].concat(rows.map(r=>[r.obra,r.transp,r.numero,r.retirada,r.baixa,String(Math.round(r.min*10)/10).replace('.',',')]));
+    const csv='﻿'+L.map(l=>l.map(esc).join(';')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='concordancia_horarios.csv'; a.click(); URL.revokeObjectURL(a.href); };
+}
+function showTab(name){ window.__tab=name; document.querySelectorAll('.tabpane').forEach(el=>{ el.style.display=(el.dataset.tab===name)?'':'none'; }); document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.go===name)); if(name==='painel'){ render(); renderCmp(); } else if(name==='just'){ renderJust(); } else if(name==='carac'){ if(MASTER_ON){ renderCarac(); if(typeof renderObras==='function')renderObras(); if(typeof renderCreds==='function')renderCreds(); } } else if(name==='prog'){ if(MASTER_ON)renderProgMatrix(); } else if(name==='users'){ if(MASTER_ON)renderAcessos(); } else if(name==='qual'){ if(MASTER_ON){ renderQualidade(); renderConcordancia(); } } else if(name==='valid'){ if(MASTER_ON)renderValidade(); } else if(name==='forn'){ if(MASTER_ON)renderFornecedores(); } else if(name==='carb'){ if(MASTER_ON)renderCarbono(); } else if(name==='dist'){ renderDistancias(); } }
 document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>showTab(b.dataset.go));
 showTab('painel');
 // Botão "Atualizar dados": recalcula etapas e re-renderiza tudo (gráficos + pendências das abas)
