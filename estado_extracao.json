@@ -25,9 +25,9 @@
   "ultimo_erro": ""
  },
  "Capitao Cavalcanti": {
-  "ultimo_sucesso": "2026-11-18",
-  "falhas_seguidas": 1,
-  "ultimo_erro": "Page.goto: Timeout 60000ms exceeded."
+  "ultimo_sucesso": "2026-11-19",
+  "falhas_seguidas": 0,
+  "ultimo_erro": ""
  },
  "Cardoso de Melo": {
   "ultimo_sucesso": "2026-11-19",
@@ -40,7 +40,7 @@
   "ultimo_erro": ""
  },
  "Chanés I": {
-  "falhas_seguidas": 86,
+  "falhas_seguidas": 87,
   "ultimo_erro": "Módulo (Gerador/Obra) não encontrado (login inválido?)",
   "ultimo_sucesso": ""
  },
@@ -60,9 +60,9 @@
   "ultimo_erro": ""
  },
  "Homem de Melo": {
-  "ultimo_sucesso": "2026-11-18",
-  "falhas_seguidas": 1,
-  "ultimo_erro": "nao foi possivel exportar o relatorio"
+  "ultimo_sucesso": "2026-11-19",
+  "falhas_seguidas": 0,
+  "ultimo_erro": ""
  },
  "Inglesa": {
   "ultimo_sucesso": "2026-11-19",
